@@ -1,0 +1,9 @@
+data/
+outputs/
+__pycache__/
+*.pyc
+*.npy
+*.pth
+.DS_Store
+
+amt_piano/

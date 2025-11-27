@@ -1,0 +1,41 @@
+----------TAREAS---------
+1.EDA , cuantas obras de cuantos compositores?
+
+Cambiar todo el dataset de .midi a mid , hacer una funcion para esto.
+Pedir cuando esto este desordenado a gemini que me lo ordene
+
+Tener en cuenta el padding , todas las piezas son de diferente duracion y tambien los midi 
+, incluso de entre ellas.
+
+-------Cambio de monofonoico a polifonico---------
+Antes(monofonico): Salida (Batch, Time, 1). Activación: Softmax (la suma da 1).
+Ahora(polifonico): Salida (Batch, Time, 88). Activación: Sigmoid.
+
+AMT_Piano_Sheet_Music/
+│
+├── data/                       <-- TU CARPETA ACTUAL (Datos Crudos)
+│   └── maestro-v3.0.0/         
+│       ├── 2004/
+│       ├── 2006/
+│       └── ...
+│
+├── processed_data/             <-- NUEVA CARPETA (Datos Listos para la IA)
+│   │
+│   ├── inputs_cqt/             <-- Input X: Los tensores de audio (CQT o Mel)
+│   │
+│   └── targets/                <-- Label Y: Aquí está la magia de "Onsets & Frames"
+│       ├── frames/             <-- Piano Roll normal (sostenido)
+│       ├── onsets/             <-- Solo el momento del ataque (golpe)
+│       └── velocities/         <-- (Opcional) La fuerza de la nota (0-127)
+│
+├── scripts/
+│   ├── 01_renombrar.py         <-- El que ya tienes
+│   └── 02_preprocess.py        <-- El script que generará los datos
+│
+└── train.py
+
+ver paper google magenta onset and frames
+
+Nonnegative matrix factorization (NMF)
+
+Tener en cuenta el suggested train/validation/test split.
