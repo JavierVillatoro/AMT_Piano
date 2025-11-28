@@ -39,3 +39,12 @@ ver paper google magenta onset and frames
 Nonnegative matrix factorization (NMF)
 
 Tener en cuenta el suggested train/validation/test split.
+
+
+VRAM (8GB vs 80GB): Aunque 8GB es suficiente para cargar este modelo ligero (5.9M parámetros), 
+tendrás que usar un batch size mucho menor (probablemente 4 u 8, en lugar de 16 o 32). 
+Esto hace que el entrenamiento sea más inestable y lento porque la tarjeta tiene que hacer más "viajes" para procesar la misma cantidad de datos.
+
+puedo hacer en google collab
+
+Visualizar con cqt los audios , ver si usar unet (imagenes medicas, para el atack y el release)
