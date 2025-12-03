@@ -62,3 +62,7 @@ Añadir dataset propio , grabar con yamaha.
 Utilizar frame_ex.
 
 Problema con mucho cero --- ¿Cómo se arregla? Usando Loss Functions ponderadas (Weighted Loss) durante el entrenamiento.
+
+Eliminar ruido de principio de todos los wavs , recortarlos con los midi
+
+Ver pedal ? añadir otros movimientos? 
