@@ -45,6 +45,20 @@ VRAM (8GB vs 80GB): Aunque 8GB es suficiente para cargar este modelo ligero (5.9
 tendrás que usar un batch size mucho menor (probablemente 4 u 8, en lugar de 16 o 32). 
 Esto hace que el entrenamiento sea más inestable y lento porque la tarjeta tiene que hacer más "viajes" para procesar la misma cantidad de datos.
 
-puedo hacer en google collab
+puedo hacer en google collab u otro medio mas sencillo?
 
 Visualizar con cqt los audios , ver si usar unet (imagenes medicas, para el atack y el release)
+
+add my own data , play piano and try different midi notes. 
+
+prompt: podrias explicarme de manera creativa esta arquitectura , para que mi abuela pudiera entenderlo?
+
+Usar dataloader de pytorch para cargar solo lo que necesito al momento
+
+Añadir partitura para prueba.
+
+Añadir dataset propio , grabar con yamaha.
+
+Utilizar frame_ex.
+
+Problema con mucho cero --- ¿Cómo se arregla? Usando Loss Functions ponderadas (Weighted Loss) durante el entrenamiento.

@@ -1,135 +1,223 @@
 import os
+import random
 import numpy as np
 import librosa
+import librosa.display
 import pretty_midi
+import matplotlib.pyplot as plt
 from pathlib import Path
 from tqdm import tqdm
 
-# --- CONFIGURACIÓN DE AUDIO (Hiperparámetros) ---
-# Estos valores deben ser LOS MISMOS cuando entrenes la IA
-SR = 16000           # Sample Rate (16kHz es suficiente para piano)
-HOP_LENGTH = 512     # Cuánto avanzamos en cada "frame". 512 muestras ≈ 32ms
-N_MELS = 229         # Cantidad de frecuencias (altura de la imagen de input)
-N_FFT = 2048         # Ventana de análisis de Fourier
-FMIN = 30            # Frecuencia mínima (aprox A0)
-MIN_MIDI = 21        # La nota más grave del piano (A0) es el MIDI 21
-MAX_MIDI = 108       # La nota más aguda (C8) es el MIDI 108
+# --- CONFIGURACIÓN DE AUDIO ---
+SR = 16000           
+HOP_LENGTH = 512     
+# CQT CONFIG (Optimizado para piano 88 teclas)
+MIN_NOTE = 'A0'      
+N_BINS = 88          
+BINS_PER_OCTAVE = 12 
+MIN_MIDI = 21        
+MAX_MIDI = 108       
+NUM_CLASSES = 88     
 
-def compute_log_mel(audio_path):
-    """Genera el Espectrograma Log-Mel (Input de la red)."""
-    y, _ = librosa.load(audio_path, sr=SR)
+def ask_percentage():
+    while True:
+        try:
+            val = input("\n📊 ¿Qué porcentaje del dataset quieres procesar? (0.1 - 100): ")
+            percent = float(val)
+            if 0 < percent <= 100:
+                return percent
+        except ValueError: pass
+
+def compute_cqt(audio_path):
+    # Cargar audio
+    y, _ = librosa.load(str(audio_path), sr=SR)
     
-    # Generar Mel Spectrogram
-    mel = librosa.feature.melspectrogram(
-        y=y, sr=SR, n_mels=N_MELS, n_fft=N_FFT, hop_length=HOP_LENGTH, fmin=FMIN
+    # Calcular CQT
+    cqt = librosa.cqt(
+        y=y, 
+        sr=SR, 
+        hop_length=HOP_LENGTH, 
+        fmin=librosa.note_to_hz(MIN_NOTE), 
+        n_bins=N_BINS, 
+        bins_per_octave=BINS_PER_OCTAVE
     )
     
-    # Convertir a decibelios (Log scale) y transponer a [Tiempo, Frecuencia]
-    log_mel = librosa.power_to_db(mel, ref=np.max).T
+    # Convertir a dB y Normalizar
+    cqt_db = librosa.amplitude_to_db(np.abs(cqt), ref=np.max).T.astype(np.float32)
     
-    # Normalizar entre 0 y 1 (opcional pero recomendado para redes neuronales)
-    # log_mel = (log_mel - log_mel.min()) / (log_mel.max() - log_mel.min())
+    # Normalización simple (0 a 1)
+    cqt_db = (cqt_db + 80.0) / 80.0
+    cqt_db = np.clip(cqt_db, 0, 1)
     
-    return log_mel.astype(np.float32)
+    return y, cqt_db
 
 def compute_labels(midi_path, num_frames):
-    """
-    Genera las matrices de Frames y Onsets (Labels).
-    num_frames: Es vital para forzar que el label mida LO MISMO que el audio.
-    """
     try:
         pm = pretty_midi.PrettyMIDI(str(midi_path))
     except Exception as e:
-        print(f"Error leyendo MIDI {midi_path}: {e}")
-        return None, None
+        print(f"Error MIDI {midi_path}: {e}")
+        return None, None, None, None
 
-    # Matrices vacías: [Tiempo, 88 teclas]
-    # Usamos int8 para ahorrar espacio (solo son 0s y 1s)
-    frame_matrix = np.zeros((num_frames, 88), dtype=np.int8)
-    onset_matrix = np.zeros((num_frames, 88), dtype=np.int8)
+    # Inicializar matrices
+    onset_matrix = np.zeros((num_frames, NUM_CLASSES), dtype=np.int8)
+    offset_matrix = np.zeros((num_frames, NUM_CLASSES), dtype=np.int8)
+    frame_matrix = np.zeros((num_frames, NUM_CLASSES), dtype=np.int8)
+    velocity_matrix = np.zeros((num_frames, NUM_CLASSES), dtype=np.float32)
 
-    # Tiempo que dura un frame en segundos
     time_per_frame = HOP_LENGTH / SR
 
     for note in pm.instruments[0].notes:
-        # Ignorar notas fuera del rango del piano (por si acaso)
         if note.pitch < MIN_MIDI or note.pitch > MAX_MIDI:
             continue
             
-        # Ajustar índice (0 = tecla 21 MIDI)
         pitch_idx = note.pitch - MIN_MIDI
-
-        # Calcular en qué frame empieza y termina la nota
         start_frame = int(note.start / time_per_frame)
         end_frame = int(note.end / time_per_frame)
+        
+        start_frame = max(0, min(start_frame, num_frames - 1))
+        end_frame = max(0, min(end_frame, num_frames - 1))
 
-        # Seguridad: no salirnos del array
-        start_frame = max(0, start_frame)
-        end_frame = min(num_frames, end_frame)
+        if end_frame <= start_frame:
+            end_frame = start_frame + 1
+        
+        if end_frame >= num_frames: continue # Evitar salir del array
 
-        if start_frame >= num_frames:
-            continue
-
-        # 1. Rellenar FRAMES (Cuerpo de la nota)
-        # Ponemos un 1 desde el inicio hasta el final
+        # Llenar matrices
         frame_matrix[start_frame:end_frame, pitch_idx] = 1
+        onset_matrix[start_frame, pitch_idx] = 1
+        if end_frame < num_frames:
+            offset_matrix[end_frame, pitch_idx] = 1
+        
+        velocity_matrix[start_frame, pitch_idx] = note.velocity / 127.0
 
-        # 2. Rellenar ONSETS (Ataque)
-        # Ponemos un 1 solo en el frame de inicio
-        # (A veces se expande a start_frame +/- 1, pero empecemos simple)
-        if start_frame < num_frames:
-            onset_matrix[start_frame, pitch_idx] = 1
+    return onset_matrix, offset_matrix, frame_matrix, velocity_matrix
 
-    return frame_matrix, onset_matrix
+def save_verification_plot(audio, cqt, onsets, frames, velocities, file_id, save_path):
+    """
+    Gráfico corregido: Usa 'extent' para forzar que las matrices coincidan
+    con el tiempo en segundos del audio.
+    """
+    # 1. Definir duración exacta en segundos
+    duration_sec = len(audio) / SR
+    
+    # 2. Definir 'extent' [x_min, x_max, y_min, y_max] para imshow
+    # Esto estira la imagen para que el eje X sean segundos, no frames.
+    extent = [0, duration_sec, 0, 88]
+
+    # Cortamos a 10 segundos para ver detalle (zoom)
+    zoom_sec = 10
+    if duration_sec > zoom_sec:
+        max_sample = int(zoom_sec * SR)
+        max_frame = int(zoom_sec * SR / HOP_LENGTH)
+        
+        audio_cut = audio[:max_sample]
+        # Recalcular duración para el corte
+        duration_cut = len(audio_cut) / SR
+        extent_cut = [0, duration_cut, 0, 88]
+        
+        cqt_cut = cqt[:max_frame].T
+        frames_cut = frames[:max_frame].T
+        onsets_cut = onsets[:max_frame].T
+        vel_cut = velocities[:max_frame].T
+    else:
+        # Si es muy corto, mostrar todo
+        audio_cut = audio
+        extent_cut = extent
+        cqt_cut = cqt.T
+        frames_cut = frames.T
+        onsets_cut = onsets.T
+        vel_cut = velocities.T
+
+    fig, ax = plt.subplots(5, 1, figsize=(12, 12), sharex=True)
+    plt.subplots_adjust(hspace=0.2)
+    
+    # Graficar Audio (Eje X = Tiempo)
+    ax[0].set_title(f"1. Audio Waveform - {file_id}")
+    librosa.display.waveshow(audio_cut, sr=SR, ax=ax[0], color='#444444')
+    ax[0].set_ylabel("Amplitude")
+    
+    # Graficar Matrices (Forzando Eje X = Tiempo con 'extent')
+    ax[1].set_title("2. Input CQT")
+    ax[1].imshow(cqt_cut, aspect='auto', origin='lower', extent=extent_cut, cmap='magma', interpolation='nearest')
+    
+    ax[2].set_title("3. Target: Frames")
+    ax[2].imshow(frames_cut, aspect='auto', origin='lower', extent=extent_cut, cmap='binary', interpolation='nearest')
+    
+    ax[3].set_title("4. Target: Onsets")
+    # Usamos rojo fuerte para ver bien los ataques
+    ax[3].imshow(onsets_cut, aspect='auto', origin='lower', extent=extent_cut, cmap='Reds', interpolation='nearest')
+    
+    ax[4].set_title("5. Target: Velocity")
+    im = ax[4].imshow(vel_cut, aspect='auto', origin='lower', extent=extent_cut, cmap='viridis', interpolation='nearest')
+    
+    ax[4].set_xlabel("Time (seconds)")
+    
+    # Guardar
+    output_file = save_path / f"debug_viz_{file_id}.png"
+    plt.savefig(output_file)
+    plt.close()
+    print(f"   📸 Verificación guardada: {output_file.name}")
 
 def procesar_dataset():
-    # Rutas
-    root_path = Path("data/maestro-v3.0.0")
-    output_base = Path("processed_data")
+    # --- RUTA DE SALIDA UNIFICADA ---
+    root_path = Path("data/maestro-v3.0.0") 
+    output_base = Path("processed_data") # <--- Sobreescribe la carpeta principal
     
-    # Crear estructura de carpetas de salida
-    (output_base / "inputs_spectrogram").mkdir(parents=True, exist_ok=True)
-    (output_base / "targets/frames").mkdir(parents=True, exist_ok=True)
-    (output_base / "targets/onsets").mkdir(parents=True, exist_ok=True)
-
-    # Buscar todos los wavs recursivamente
-    wav_files = list(root_path.rglob("*.wav"))
+    # Crear estructura
+    folders = ["inputs_cqt", "targets_onset", "targets_offset", "targets_frame", "targets_velocity"]
+    for sub in folders:
+        (output_base / sub).mkdir(parents=True, exist_ok=True)
     
-    print(f"🚀 Iniciando procesamiento de {len(wav_files)} archivos...")
-    print(f"⚙️  Configuración: SR={SR}, Hop={HOP_LENGTH}, Mels={N_MELS}")
+    viz_path = output_base / "debug_visualizations"
+    viz_path.mkdir(parents=True, exist_ok=True)
 
-    for wav_path in tqdm(wav_files):
-        # Encontrar el MIDI correspondiente (mismo nombre, extensión .mid)
-        # Asumimos que ya corriste el script de renombrado a .mid
+    all_wavs = list(root_path.rglob("*.wav"))
+    
+    if not all_wavs:
+        print("❌ No se encontraron archivos .wav")
+        return
+
+    percent = ask_percentage()
+    num_to_process = int(len(all_wavs) * (percent / 100))
+    if num_to_process < 1: num_to_process = 1
+    
+    random.shuffle(all_wavs)
+    selected_wavs = all_wavs[:num_to_process]
+
+    print(f"\n🚀 Procesando {num_to_process} archivos...")
+    print(f"📂 Guardando en: {output_base.resolve()}")
+
+    viz_count = 0 
+    MAX_VIZ = 3
+
+    for wav_path in tqdm(selected_wavs):
         midi_path = wav_path.with_suffix(".mid")
-        
-        if not midi_path.exists():
-            # Intento de fallback por si no se renombró o es .midi
-            midi_path = wav_path.with_suffix(".midi")
-            if not midi_path.exists():
-                print(f"⚠️ MIDI no encontrado para: {wav_path.name}")
-                continue
+        if not midi_path.exists(): midi_path = wav_path.with_suffix(".midi")
+        if not midi_path.exists(): continue
 
-        # Generar ID único para el archivo (ej: 2004_filename)
-        # Usamos el nombre de la carpeta año + nombre archivo para evitar duplicados
         file_id = f"{wav_path.parent.name}_{wav_path.stem}"
 
-        # 1. Procesar AUDIO
-        log_mel = compute_log_mel(wav_path)
+        # 1. Audio + CQT
+        audio_raw, cqt = compute_cqt(wav_path)
         
-        # 2. Procesar MIDI (Usando el largo del audio para alinear)
-        frames, onsets = compute_labels(midi_path, num_frames=log_mel.shape[0])
+        # 2. Labels
+        onsets, offsets, frames, vels = compute_labels(midi_path, cqt.shape[0])
 
-        if frames is None:
-            continue
+        if onsets is None: continue
 
-        # 3. Guardar como .npy
-        np.save(output_base / "inputs_spectrogram" / f"{file_id}.npy", log_mel)
-        np.save(output_base / "targets/frames" / f"{file_id}.npy", frames)
-        np.save(output_base / "targets/onsets" / f"{file_id}.npy", onsets)
+        # 3. Guardar Datos
+        np.save(output_base / "inputs_cqt" / f"{file_id}.npy", cqt)
+        np.save(output_base / "targets_onset" / f"{file_id}.npy", onsets)
+        np.save(output_base / "targets_offset" / f"{file_id}.npy", offsets)
+        np.save(output_base / "targets_frame" / f"{file_id}.npy", frames)
+        np.save(output_base / "targets_velocity" / f"{file_id}.npy", vels)
 
-    print("\n✅ ¡Procesamiento completado!")
-    print(f"📂 Los datos están en: {output_base.resolve()}")
+        # 4. Visualización (Solo las primeras 3)
+        if viz_count < MAX_VIZ:
+            save_verification_plot(audio_raw, cqt, onsets, frames, vels, file_id, viz_path)
+            viz_count += 1
+
+    print("\n✅ ¡Proceso completado correctamente!")
 
 if __name__ == "__main__":
     procesar_dataset()
