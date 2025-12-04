@@ -65,4 +65,8 @@ Problema con mucho cero --- ¿Cómo se arregla? Usando Loss Functions ponderadas
 
 Eliminar ruido de principio de todos los wavs , recortarlos con los midi
 
-Ver pedal ? añadir otros movimientos? 
+Ver pedal ? añadir otros movimientos?
+
+Add optuna
+
+Dataset ahora entrena y quita los que nos son iguales

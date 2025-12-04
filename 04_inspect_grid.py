@@ -10,7 +10,7 @@ HOP_LENGTH = 512
 FRAME_TIME = HOP_LENGTH / SR  # 0.032s
 
 def midi_to_name(midi_number):
-    return librosa.midi_to_note(midi_number + 21) # +21 porque tu script usa indices 0-87
+    return librosa.midi_to_note(midi_number + 21)
 
 def plot_paper_style_grid():
     base_path = Path("processed_data")
@@ -19,17 +19,10 @@ def plot_paper_style_grid():
         return
 
     # 1. Cargar una canción al azar
-    files = list((base_path / "inputs_cqt_2").glob("*.npy"))
+    files = list((base_path / "inputs_cqt").glob("*.npy"))
     if not files:
-        # Fallback a la carpeta sin _2 si no existe
-        files = list((base_path / "inputs_cqt").glob("*.npy"))
-        input_folder = "inputs_cqt"
-        suffix = ""
-    else:
-        input_folder = "inputs_cqt_2"
-        suffix = "_2"
-        
-    if not files: return print("No hay datos procesados.")
+        print("No hay datos procesados.")
+        return
 
     chosen_file = random.choice(files)
     fid = chosen_file.name
@@ -37,62 +30,54 @@ def plot_paper_style_grid():
 
     # Cargar matrices
     try:
-        # Input no lo necesitamos para esta gráfica, solo los targets
-        onsets = np.load(base_path / f"targets_onset{suffix}" / fid)
-        frames = np.load(base_path / f"targets_frame{suffix}" / fid)
-        offsets = np.load(base_path / f"targets_offset{suffix}" / fid)
-        vels = np.load(base_path / f"targets_velocity{suffix}" / fid)
+        onsets = np.load(base_path / "targets_onset" / fid)
+        frames = np.load(base_path / "targets_frame" / fid)
+        offsets = np.load(base_path / "targets_offset" / fid)
+        vels = np.load(base_path / "targets_velocity" / fid)
     except FileNotFoundError:
         print("❌ Faltan archivos targets.")
         return
 
-    # 2. Buscar un "momento interesante" (donde haya notas sonando)
-    # Sumamos actividad en frames para encontrar donde tocan algo
+    # 2. Buscar un "momento interesante"
     activity = frames.sum(axis=1)
-    # Buscamos índices donde haya al menos 1 nota sonando
     active_idxs = np.where(activity > 0)[0]
     
     if len(active_idxs) == 0:
         print("Canción vacía (silencio).")
         return
 
-    # Elegimos un punto medio aleatorio dentro de la actividad
     center_idx = random.choice(active_idxs)
     
-    # 3. Definir ventana de ZOOM (Ej: 15 frames = 0.48 segundos)
+    # 3. Definir ventana de ZOOM
     WINDOW = 14 
     start = max(0, center_idx - WINDOW // 2)
     end = min(len(frames), start + WINDOW)
     
-    # Recortar datos
-    sl_onset = onsets[start:end].T   # Transponemos para que Tiempo sea Eje X
+    # Recortar datos y Transponer
+    sl_onset = onsets[start:end].T
     sl_frame = frames[start:end].T
     sl_offset = offsets[start:end].T
     sl_vel = vels[start:end].T
 
-    # 4. Filtrar teclas inactivas (para no mostrar 88 filas)
-    # Si la suma de la fila en el slice es 0 en todas las matrices, la quitamos
+    # 4. Filtrar teclas inactivas
     total_activity = sl_onset + sl_frame + sl_offset
     active_keys_idx = np.where(total_activity.sum(axis=1) > 0)[0]
     
     if len(active_keys_idx) == 0:
         print("Slice vacío, reintentando...")
-        return plot_paper_style_grid() # Recursión simple si fallamos
+        return plot_paper_style_grid()
 
-    # Recortar solo teclas activas
     sl_onset = sl_onset[active_keys_idx]
     sl_frame = sl_frame[active_keys_idx]
     sl_offset = sl_offset[active_keys_idx]
     sl_vel = sl_vel[active_keys_idx]
     
-    # Nombres de notas para el eje Y
     note_names = [librosa.midi_to_note(idx + 21) for idx in active_keys_idx]
 
     # --- GRAFICADO ---
     fig, axes = plt.subplots(4, 1, figsize=(12, 10), sharex=True)
     plt.subplots_adjust(hspace=0.1)
     
-    # Tiempos para el eje X
     times = np.arange(start, end) * FRAME_TIME
     time_labels = [f"{t:.3f}s" for t in times]
 
@@ -115,35 +100,36 @@ def plot_paper_style_grid():
                 val = data[i, j]
                 if val > 0:
                     text_color = 'black'
-                    # Formato: Entero o Decimal
+                    # Si es float, mostramos 2 decimales. Si no, entero.
                     txt = f"{val:.2f}" if is_float else f"{int(val)}"
-                    # Fondo de color suave si es activo
-                    rect = plt.Rectangle((j-0.5, i-0.5), 1, 1, facecolor=cmap, alpha=0.3)
+                    # Para floats pequeños (ej. 0.05), quitamos el '0' del principio para ahorrar espacio si quieres
+                    if is_float and val < 1: txt = f"{val:.2f}".lstrip('0') 
+                    
+                    rect = plt.Rectangle((j-0.5, i-0.5), 1, 1, facecolor=cmap, alpha=0.3 + (val*0.4)) # Alpha dinámico según intensidad
                     ax.add_patch(rect)
-                    ax.text(j, i, txt, ha='center', va='center', color=text_color, fontweight='bold')
+                    ax.text(j, i, txt, ha='center', va='center', color=text_color, fontweight='bold', fontsize=9)
                 else:
-                    # Ceros en gris claro
-                    ax.text(j, i, "0", ha='center', va='center', color='#cccccc')
+                    ax.text(j, i, "0", ha='center', va='center', color='#cccccc', fontsize=8)
 
         ax.set_xlim(-0.5, len(time_labels)-0.5)
         ax.set_ylim(-0.5, len(note_names)-0.5)
 
-    # 1. Onset
-    plot_matrix(axes[0], sl_onset, "ONSET", "orange")
-    # 2. Velocity
+    # 1. Onset (AHORA ES FLOAT)
+    plot_matrix(axes[0], sl_onset, "ONSET\n(High-Res)", "orange", is_float=True)
+    # 2. Velocity (Float)
     plot_matrix(axes[1], sl_vel, "VELOCITY", "cyan", is_float=True)
-    # 3. Offset
-    plot_matrix(axes[2], sl_offset, "OFFSET", "yellow")
-    # 4. Frame
-    plot_matrix(axes[3], sl_frame, "FRAME", "green")
+    # 3. Offset (AHORA ES FLOAT)
+    plot_matrix(axes[2], sl_offset, "OFFSET\n(High-Res)", "yellow", is_float=True)
+    # 4. Frame (Sigue siendo Binario 0/1)
+    plot_matrix(axes[3], sl_frame, "FRAME", "green", is_float=False)
 
-    axes[0].set_title(f"Vista Detallada de Tensores (Paper Style) - {fid}\nZoom en frame {start} a {end}", pad=20)
+    axes[0].set_title(f"Visualización High-Resolution (Paper Style) - {fid}", pad=20)
     plt.xlabel("Tiempo (Segundos)")
     
-    save_path = base_path / "debug_visualizations" / f"paper_grid_{fid}.png"
+    save_path = base_path / "debug_visualizations" / f"paper_grid_HR_{fid}.png"
     plt.savefig(save_path, bbox_inches='tight')
     plt.close()
-    print(f"✅ Gráfico estilo Paper guardado en: {save_path}")
+    print(f"✅ Gráfico High-Resolution guardado en: {save_path}")
 
 if __name__ == "__main__":
     plot_paper_style_grid()
