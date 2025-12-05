@@ -3,15 +3,14 @@ import numpy as np
 import glob
 import sys
 
-# --- CONFIGURACIÓN DE CARPETAS ---
-# Ajusta estos nombres exactamente a como los tienes en tu disco duro
+
 BASE_DIR = "processed_data"
 
 FOLDERS = {
     "cqt":      os.path.join(BASE_DIR, "inputs_cqt"),
-    "onset":    os.path.join(BASE_DIR, "targets_onset"),     # Ajustar si es plural/singular
-    "offset":   os.path.join(BASE_DIR, "targets_offset"),   # Corregí 'targest' a 'targets'
-    "frame":    os.path.join(BASE_DIR, "targets_frame"),     # Dejé 'fram' como dijiste (o frame?)
+    "onset":    os.path.join(BASE_DIR, "targets_onset"),     
+    "offset":   os.path.join(BASE_DIR, "targets_offset"),   
+    "frame":    os.path.join(BASE_DIR, "targets_frame"),     
     "velocity": os.path.join(BASE_DIR, "targets_velocity")
 }
 

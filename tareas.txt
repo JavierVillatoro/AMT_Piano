@@ -70,3 +70,8 @@ Ver pedal ? añadir otros movimientos?
 Add optuna
 
 Dataset ahora entrena y quita los que nos son iguales
+
+Solucionar problema dataset al cargar en training, hacer nuevo training
+
+quizas lo de soft en onset y offset solo en inferencia , tratar de dejarlo todo en el grid. probar ambos,
+cambiar funcion de preprocess para ver si activo o no high res en onset y offset.
