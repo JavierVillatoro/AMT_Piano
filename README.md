@@ -1,88 +1,103 @@
-# AMT Piano Sheet Music - Proyecto de Transcripción (Deep Learning)
+# AMT Piano Sheet Music - Transcription Project (Deep Learning)
 
-Este proyecto implementa un sistema de **Automatic Music Transcription (AMT)** para piano utilizando una arquitectura híbrida **CRNN (Convolutional Recurrent Neural Network)**. 
+This project implements an **Automatic Music Transcription (AMT)** system for piano using a hybrid **CRNN (Convolutional Recurrent Neural Network)** architecture.
 
-El modelo convierte audio (`.wav`) a MIDI (`.mid`) prediciendo no solo las notas, sino también su duración exacta y dinámica (velocity).
+The model converts audio (`.wav`) into MIDI (`.mid`), predicting not only pitch but also precise **note durations** and **velocity**.
 
 ---
 
-## Pipeline de Ejecución (Orden Correcto)
+## Execution Pipeline (Correct Order)
 
-### 1. Preparación de Datos
+### 1. Data Preparation
+
 * **Script:** `01_rename_midi.py`
-    * **Función:** Normaliza las extensiones de `.midi` a `.mid`.
+    * **Function:** Normalizes `.midi` extensions to `.mid`.
+
 * **Script:** `02_resample_in_place.py`
-    * **Función:** Convierte todo el dataset MAESTRO a **16.000 Hz (Mono)**. Sobrescribe los originales para ahorrar espacio.
+    * **Function:** Converts the entire MAESTRO dataset to **16,000 Hz (Mono)**. Overwrites originals to save disk space.
 
-### 2. Preprocesamiento (CQT / HCQT)
-* **Script:** `03_preprocess_multichannel_fixed.py` (Recomendado)
-    * **Función:** Convierte audio en espectrogramas.
-    * **Modos:**
-        * `Opción 1 (CQT)`: 1 Canal. Estándar.
-        * `Opción 2 (HCQT)`: 3 Canales (Fundamental, 2º Armónico, 3º Armónico). *Mejor calidad.*
-    * **Fix:** Incluye padding con ceros para frecuencias que superan el límite de Nyquist (8kHz).
+---
 
-### 3. Entrenamiento (Full-Stack)
+### 2. Preprocessing (CQT / HCQT)
+
+* **Script:** `03_preprocess_multichannel_fixed.py` (**Recommended**)
+    * **Function:** Converts audio into spectrograms.
+    * **Modes:**
+        * **Option 1 (CQT):** 1 channel. Standard.
+        * **Option 2 (HCQT):** 3 channels (Fundamental, 2nd Harmonic, 3rd Harmonic). *Higher quality.*
+
+    * **Fix:** Includes zero-padding for frequencies above the Nyquist limit (8 kHz).
+
+---
+
+### 3. Training (Full-Stack)
+
 * **Script:** `06_training_full.py`
-    * **Arquitectura:** U-Net (Encoder/Decoder) + BiLSTM (Contexto Temporal).
-    * **Cabezas de Salida (4 Heads):**
-        1.  `Onset`: ¿Empieza una nota?
-        2.  `Frame`: ¿Se mantiene la nota?
-        3.  `Offset`: ¿Acaba la nota? (Para precisión en la duración).
-        4.  `Velocity`: Dinámica/Volumen (0-127).
-    * **Optimizaciones:**
-        * `Smart Sampling`: El Dataset ignora fragmentos de silencio.
-        * `Masked Loss`: Solo entrenamos la velocity cuando realmente hay una nota.
-        * `Pos_weight`: Balanceo de clases (10x peso a los Onsets).
+    * **Architecture:** U-Net (Encoder/Decoder) + BiLSTM (Temporal Context).
+    * **Output Heads (4 heads):**
+        1. `Onset`: Does a note start?
+        2. `Frame`: Is the note sustained?
+        3. `Offset`: Does the note end? (For accurate duration)
+        4. `Velocity`: Note dynamics (0–127)
 
-### 4. Inferencia (Audio -> MIDI)
+    * **Optimizations:**
+        * **Smart Sampling:** Ignores silent fragments.
+        * **Masked Loss:** Velocity is trained only when a note is present.
+        * **Pos_weight:** Class balancing (10× weight for Onsets).
+
+---
+
+### 4. Inference (Audio → MIDI)
+
 * **Script:** `07_inference_full.py`
-    * **Función:** Genera el archivo MIDI final.
-    * **Características:**
-        * Autodetecta formato (MP3/WAV) y convierte a 16kHz.
-        * Aplica **Padding** para evitar errores de tamaño en la U-Net.
-        * Usa `Onset` + `Frame` + `Offset` para cortar las notas con precisión milimétrica.
-        * Asigna la **Velocity real** predicha por el modelo (no random).
-    * **Salida:** Guarda los resultados en la carpeta `mis_midis_generados`.
+    * **Function:** Generates the final MIDI file.
+    * **Features:**
+        * Auto-detects format (MP3/WAV) and converts to 16 kHz.
+        * Applies **padding** to avoid U-Net size mismatches.
+        * Uses `Onset` + `Frame` + `Offset` for millisecond-accurate note durations.
+        * Uses the **predicted velocity** (no randomness).
+
+    * **Output:** Results are saved in `mis_midis_generados`.
 
 ---
 
-## Arquitectura del Modelo (`PianoCRNN`)
+## Model Architecture (`PianoCRNN`)
 
-La red neuronal procesa ventanas de audio de ~10 segundos (320 frames).
+The neural network processes ~10-second windows (320 frames).
 
-| Componente | Configuración |
+| Component | Configuration |
 | :--- | :--- |
-| **Input** | `(Batch, 1, 320, 88)` o `(Batch, 3, 320, 88)` |
-| **Encoder** | 3 Bloques Convolucionales con MaxPool (solo en tiempo `2x1`). |
-| **Bottleneck** | BiLSTM (Bidireccional) con 128 unidades ocultas. |
-| **Decoder** | 3 Bloques con Skip Connections (estilo U-Net). |
-| **Salida** | 4 Matrices de Probabilidad `(Time, 88)`. |
+| **Input** | `(Batch, 1, 320, 88)` or `(Batch, 3, 320, 88)` |
+| **Encoder** | 3 Convolutional Blocks with MaxPool (time-only `2×1`) |
+| **Bottleneck** | Bidirectional LSTM with 128 hidden units |
+| **Decoder** | 3 Blocks with Skip Connections (U-Net style) |
+| **Output** | 4 probability matrices `(Time, 88)` |
 
 ---
 
-## Solución de Errores Comunes
+## Common Error Fixes
 
-1.  **Error de Nyquist en Preprocess:**
-    * *Causa:* Intentar calcular el 3er armónico de notas agudas (>8kHz).
-    * *Solución:* El script `fixed` rellena esas frecuencias con ceros.
+1. **Nyquist Error in Preprocessing**
+    * *Cause:* Trying to compute 3rd harmonic for high notes (> 8 kHz).
+    * *Solution:* The `fixed` script fills those frequencies with zeros.
 
-2.  **RuntimeError: Sizes of tensors must match... (Inferencia):**
-    * *Causa:* El audio tiene una longitud impar que no cuadra con el MaxPool.
-    * *Solución:* `07_inference_full.py` aplica padding automático para que sea múltiplo de 4.
+2. **RuntimeError: Sizes of tensors must match... (Inference)**
+    * *Cause:* Audio length mismatches due to MaxPool downsampling.
+    * *Solution:* `07_inference_full.py` automatically pads the audio to be a multiple of 4.
 
-3.  **OSError con MP3 (Windows):**
-    * *Causa:* Arrastrar archivos a PowerShell añade `&` y comillas.
-    * *Solución:* El script de inferencia limpia automáticamente la ruta del archivo.
+3. **OSError with MP3 (Windows)**
+    * *Cause:* Dragging files into PowerShell adds `&` and quotes.
+    * *Solution:* The inference script automatically cleans the file path.
 
 ---
 
-## Librerías Necesarias
+## Required Libraries
+
 ```bash
-pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu118](https://download.pytorch.org/whl/cu118)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
 pip install numpy librosa pretty_midi soundfile tqdm scikit-learn matplotlib seaborn
-# Opcional para MP3 en Windows:
+
+# Optional for MP3 on Windows:
 # winget install ffmpeg
 
-
-Inference_full.py
