@@ -7,8 +7,6 @@ import librosa
 import pretty_midi
 from pathlib import Path
 import warnings
-
-# --- IMPORTANTE: Intentar importar pydub para la conversión ---
 try:
     from pydub import AudioSegment
     PYDUB_AVAILABLE = True
