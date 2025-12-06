@@ -1,4 +1,4 @@
-# 🎹 AMT Piano Sheet Music - Proyecto de Transcripción (Deep Learning)
+# AMT Piano Sheet Music - Proyecto de Transcripción (Deep Learning)
 
 Este proyecto implementa un sistema de **Automatic Music Transcription (AMT)** para piano utilizando una arquitectura híbrida **CRNN (Convolutional Recurrent Neural Network)**. 
 
@@ -6,7 +6,7 @@ El modelo convierte audio (`.wav`) a MIDI (`.mid`) prediciendo no solo las notas
 
 ---
 
-## 🚀 Pipeline de Ejecución (Orden Correcto)
+## Pipeline de Ejecución (Orden Correcto)
 
 ### 1. Preparación de Datos
 * **Script:** `01_rename_midi.py`
@@ -47,7 +47,7 @@ El modelo convierte audio (`.wav`) a MIDI (`.mid`) prediciendo no solo las notas
 
 ---
 
-## 🧠 Arquitectura del Modelo (`PianoCRNN`)
+## Arquitectura del Modelo (`PianoCRNN`)
 
 La red neuronal procesa ventanas de audio de ~10 segundos (320 frames).
 
@@ -61,7 +61,7 @@ La red neuronal procesa ventanas de audio de ~10 segundos (320 frames).
 
 ---
 
-## 🛠️ Solución de Errores Comunes
+## Solución de Errores Comunes
 
 1.  **Error de Nyquist en Preprocess:**
     * *Causa:* Intentar calcular el 3er armónico de notas agudas (>8kHz).
@@ -77,7 +77,7 @@ La red neuronal procesa ventanas de audio de ~10 segundos (320 frames).
 
 ---
 
-## 📦 Librerías Necesarias
+## Librerías Necesarias
 ```bash
 pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu118](https://download.pytorch.org/whl/cu118)
 pip install numpy librosa pretty_midi soundfile tqdm scikit-learn matplotlib seaborn

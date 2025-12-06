@@ -113,5 +113,7 @@ mejorar onset
 
 añadir pedal como output , ver si se puede extraer en ableton 
 
+hcqt no usar , probar hppnet
+
 
 
