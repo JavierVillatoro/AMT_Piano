@@ -23,10 +23,8 @@ AMT_Piano_Sheet_Music/
 │   │
 │   ├── inputs_cqt/             <-- Input X: Los tensores de audio (CQT o Mel)
 │   │
-│   └── targets/                <-- Label Y: Aquí está la magia de "Onsets & Frames"
-│       ├── frames/             <-- Piano Roll normal (sostenido)
-│       ├── onsets/             <-- Solo el momento del ataque (golpe)
-│       └── velocities/         <-- (Opcional) La fuerza de la nota (0-127)
+│   └── targets_frame                <-- Label Y: Aquí está la magia de "Onsets & Frames"
+│               <-- (Opcional) La fuerza de la nota (0-127)
 │
 ├── scripts/
 │   ├── 01_renombrar.py         <-- El que ya tienes
@@ -75,3 +73,45 @@ Solucionar problema dataset al cargar en training, hacer nuevo training
 
 quizas lo de soft en onset y offset solo en inferencia , tratar de dejarlo todo en el grid. probar ambos,
 cambiar funcion de preprocess para ver si activo o no high res en onset y offset.
+
+Data _ augmentation , probar con filtros de las canciones que ha seleccionado
+
+Procesar cqt hppnet? 
+
+PROBAR ARQUITECTURA HPPNET
+Si quieres mejorar la entrada, no la simplifiques, enriquécela.
+
+Existe una técnica llamada HCQT (Harmonic Constant-Q Transform), que es el estándar de oro en papers modernos (como los de Google Magenta).
+
+CQT Normal (Tu input actual): Es una imagen 2D [Tiempo, Frecuencia].
+
+HCQT (Input Avanzado): Es un tensor 3D [Canales, Tiempo, Frecuencia].
+
+Canal 1: CQT normal (frecuencia fundamental).
+
+Canal 2: CQT mirando 2x frecuencias (primer armónico).
+
+Canal 3: CQT mirando 3x frecuencias (segundo armónico).
+
+Al apilar los armónicos en canales (como si fueran colores RGB), la Red Neuronal (CNN) aprende facilísimo la relación entre notas.
+
+
+
+
+
+
+✅ ¡MIDI guardado en: c:\Users\franc\Desktop\proyectos\AMT_Piano_Sheet_Music\data\maestro-v3.0.0\2008\MIDI-Unprocessed_02_R1_2008_01-05_ORIG_MID--AUDIO_02_R1_2008_wav--4.mid! 
+
+solucionar midi velocity
+
+mejor ahora velocity , ver por que no pilla bien el frame , onset va mejor , añadir pedal? ver si en el midi del dataset esta.
+
+🚀 Procesando 255 archivos en MODO: HCQT
+📂 Guardando en: C:\Users\franc\Desktop\proyectos\AMT_Piano_Sheet_Music\processed_data_hcqt_fixed
+
+mejorar onset
+
+añadir pedal como output , ver si se puede extraer en ableton 
+
+
+
