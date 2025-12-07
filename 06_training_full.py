@@ -17,7 +17,7 @@ SEED = 42
 SEGMENT_FRAMES = 320 
 BATCH_SIZE = 6       # Conservador para tu GTX 1650 (si te sobra VRAM, sube a 8)
 LEARNING_RATE = 5e-4 
-EPOCHS = 35          # Un poco más largo para que aprenda los matices
+EPOCHS = 100          # Un poco más largo para que aprenda los matices
 
 def set_seed(seed):
     random.seed(seed)

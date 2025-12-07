@@ -314,3 +314,6 @@ def validate(model, loader, in_ch):
 
 if __name__ == "__main__":
     train()
+    
+    
+#Por que solo sale por pantalla la validation del onset? me gustaria ver la del frame, offset y velocity.
