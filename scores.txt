@@ -1,0 +1,29 @@
+------------ CQT + Unet - Bilstm --------------------
+
+🔹 ONSET -> F1: 0.6229 | Prec: 0.5082 | Rec: 0.8044
+🔹 OFFSET -> F1: 0.2942 | Prec: 0.6936 | Rec: 0.1867
+🔹 FRAME -> F1: 0.5922 | Prec: 0.4776 | Rec: 0.7789
+==============================
+RESUMEN DEL DATASET
+==============================
+Total Tracks procesados: 637
+Total Frames (Tiempo):   11555138
+Promedio Frames/Track:   18140
+
+DATASET 50% , 100 epochs 
+
+{'lr': 0.002064477303335853, 'batch_size': 8, 'dropout': 0.3984059063657285, 'onset_weight': 5.757155799157641}
+
+>>> INFORME DETALLADO DEL PRIMER ARCHIVO: 2004_MIDI-Unprocessed_SMF_02_R1_2004_01-05_ORIG_MID--AUDIO_02_R1_2004_08_Track08_wav.npy <<<
+TIPO       | SHAPE           | DTYPE      | MIN      | MAX      | MEAN
+---------------------------------------------------------------------------
+cqt        | (6081, 88)      | float32    | 0.00     | 1.00     | 0.4380
+onset      | (6081, 88)      | float32    | 0.00     | 1.00     | 0.0159
+offset     | (6081, 88)      | float32    | 0.00     | 1.00     | 0.0159
+frame      | (6081, 88)      | int8       | 0.00     | 1.00     | 0.0220
+velocity   | (6081, 88)      | float32    | 0.00     | 0.83     | 0.0028
+---------------------------------------------------------------------------
+
+
+--------- HCQT
+60 por ciento

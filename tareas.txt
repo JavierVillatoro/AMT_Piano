@@ -121,5 +121,29 @@ https://www.youtube.com/watch?v=xalEErDbwew
 
 https://www.youtube.com/watch?v=cl0JWHZFSfo
 
+Probar hcqt 
 
 
+
+
+1. El Problema: Desbalance de Clases (Class Imbalance)
+
+En la transcripción de piano, detectar el onset (el momento exacto en que el martillo golpea la cuerda) 
+es un problema muy desbalanceado.
+
+Imagina una canción de 3 minutos dividida en frames.Una nota específica (ej. Do central) puede sonar 
+durante 2 segundos, pero el "golpe" inicial (onset) dura solo 1 frame.
+
+Resultado: Tu matriz de objetivos tiene un 99.9% de ceros (silencio/no inicio) y solo un 0.1% de 
+unos (inicio de nota).
+
+Si entrenas sin pesos, el modelo aprenderá rápido un truco perezoso: "Si predigo siempre 0, 
+tendré un 99.9% de accuracy". El modelo dejará de intentar detectar notas porque es "más seguro" no predecir nada.
+
+2. La Solución: pos_weight (Peso positivo)
+Para combatir esto, utilizas BCEWithLogitsLoss con el argumento pos_weight.
+
+
+
+
+-------continuar scores--------

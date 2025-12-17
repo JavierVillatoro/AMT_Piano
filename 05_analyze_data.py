@@ -4,10 +4,10 @@ import glob
 import sys
 
 
-BASE_DIR = "processed_data"
+BASE_DIR = "processed_data_HPPNET"
 
 FOLDERS = {
-    "cqt":      os.path.join(BASE_DIR, "inputs_cqt"),
+    "cqt":      os.path.join(BASE_DIR, "inputs_hcqt"),
     "onset":    os.path.join(BASE_DIR, "targets_onset"),     
     "offset":   os.path.join(BASE_DIR, "targets_offset"),   
     "frame":    os.path.join(BASE_DIR, "targets_frame"),     

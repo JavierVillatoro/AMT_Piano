@@ -13,7 +13,7 @@ def midi_to_name(midi_number):
     return librosa.midi_to_note(midi_number + 21)
 
 def plot_paper_style_grid():
-    base_path = Path("processed_data")
+    base_path = Path("processed_data_on_grid")
     if not base_path.exists():
         print("❌ Ejecuta primero el preprocesamiento.")
         return

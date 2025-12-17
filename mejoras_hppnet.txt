@@ -1,0 +1,11 @@
+🏆 Cambios Críticos Implementados:
+HCQT de 6 Canales: Implementado con la lista de armónicos [0.5, 1, 2, 3, 4, 5] 
+para capturar sub-armónicos y timbre.
+
+Velocity Extendido (SOTA Fix): La matriz de velocity ya no es solo un punto al inicio. 
+Ahora la velocity "pinta" toda la duración de la nota. Esto permitirá que tu red (y la futura BiLSTM) 
+aprendan la dinámica sostenida.
+
+High-Resolution Labels: J_WIDTH = 1. Etiquetas ultra-nítidas para obligar al modelo a ser preciso.
+
+Estructura de Directorios: Guarda en processed_data_HPPNET/inputs_hcqt para diferenciarlo de los datos antiguos.
