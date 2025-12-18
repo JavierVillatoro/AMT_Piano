@@ -143,7 +143,20 @@ tendré un 99.9% de accuracy". El modelo dejará de intentar detectar notas porq
 2. La Solución: pos_weight (Peso positivo)
 Para combatir esto, utilizas BCEWithLogitsLoss con el argumento pos_weight.
 
+Consejo: Confía en mí para la estructura, las clases y la optimización, pero siempre verifica 
+las dimensiones de los tensores y los nombres exactos de los argumentos de las funciones.
+
 
 
 
 -------continuar scores--------
+¿Cómo se soluciona esto profesionalmente? (Para el futuro) 
+No tienes que cambiar tu código ahora, pero cuando quieras usar el modelo para generar 
+canciones completas, se usa la técnica de Overlap & Stitch (Solapamiento y Costura):
+
+En lugar de cortar 0-10, 10-20, 20-30...
+
+Cortas con solapamiento: 0-11, 10-21, 20-31...
+
+Descartas el primer y el último medio segundo de cada clip (donde ocurren los errores) y 
+unes las partes centrales limpias.

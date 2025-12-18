@@ -25,5 +25,33 @@ velocity   | (6081, 88)      | float32    | 0.00     | 0.83     | 0.0028
 ---------------------------------------------------------------------------
 
 
---------- HCQT
-60 por ciento
+--------- HCQT- HPPNET ----------
+DATASET 50 % 22 epochs
+
+✅ Ep 22 | T.Loss: 0.1754 | V.Loss: 0.1756
+   🔹 ONSET  -> F1: 0.6788 | Prec: 0.6362 | Rec: 0.7275
+   🔹 FRAME  -> F1: 0.5980 | Prec: 0.4397 | Rec: 0.9343
+   🔹 OFFSET -> F1: 0.3435 | Prec: 0.2968 | Rec: 0.4077
+   💾 ¡Nuevo Récord Onset (0.6787)! Modelo guardado. 
+
+>>> INFORME DETALLADO DEL PRIMER ARCHIVO: 2004_MIDI-Unprocessed_SMF_02_R1_2004_01-05_ORIG_MID--AUDIO_02_R1_2004_05_Track05_wav.npy <<<
+TIPO       | SHAPE           | DTYPE      | MIN      | MAX      | MEAN     
+---------------------------------------------------------------------------
+cqt        | (30301, 88, 3)  | float32    | 0.00     | 1.00     | 0.4446   
+onset      | (30301, 88)     | float32    | 0.00     | 1.00     | 0.0030   
+offset     | (30301, 88)     | float32    | 0.00     | 1.00     | 0.0030   
+frame      | (30301, 88)     | int8       | 0.00     | 1.00     | 0.0219   
+velocity   | (30301, 88)     | float32    | 0.00     | 0.76     | 0.0109
+---------------------------------------------------------------------------
+
+Analizando el resto de archivos (solo se mostrarán errores)...
+
+==============================
+RESUMEN DEL DATASET
+==============================
+Total Tracks procesados: 637
+Total Frames (Tiempo):   11175722
+Promedio Frames/Track:   17544
+
+HCQT armonicos [0.5,1,2]
+SR = 16K 
