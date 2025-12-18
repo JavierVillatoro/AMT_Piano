@@ -203,7 +203,10 @@ def save_verification_plot(audio, hcqt, onsets, frames, velocities, file_id, sav
     
     ax[4].set_title("5. Target: Velocity")
     im = ax[4].imshow(vel_cut.T, aspect='auto', origin='lower', extent=extent_cut, cmap='inferno')
-    plt.colorbar(im, ax=ax[4], label="Velocity")
+    
+    cbar = fig.colorbar(im, ax=ax[4], orientation='horizontal', fraction=0.05, pad=0.25)
+    cbar.set_label("Velocity")
+    
     ax[4].set_xlabel("Time (s)")
     
     out_file = save_path / f"verify_{file_id}.png"

@@ -9,3 +9,21 @@ aprendan la dinámica sostenida.
 High-Resolution Labels: J_WIDTH = 1. Etiquetas ultra-nítidas para obligar al modelo a ser preciso.
 
 Estructura de Directorios: Guarda en processed_data_HPPNET/inputs_hcqt para diferenciarlo de los datos antiguos.
+
+Nota sobre HPPNet-sp vs HPPNet-base: El paper menciona una variante avanzada llamada HPPNet-sp donde el 
+Onset tiene su propio modelo acústico separado desde el principio. Nosotros hemos implementado HPPNet-base 
+(compartido) para que el modelo sea ligero ("Tiny") y quepa en tu memoria, tal como discutimos, 
+pero la separación de RNNs al final se mantiene estricta.
+
+
+OVERLAPPING .¿Cómo se soluciona esto profesionalmente? (Para el futuro) 
+No tienes que cambiar tu código ahora, pero cuando quieras usar el modelo para generar 
+canciones completas, se usa la técnica de Overlap & Stitch (Solapamiento y Costura):
+En lugar de cortar 0-10, 10-20, 20-30...
+Cortas con solapamiento: 0-11, 10-21, 20-31...
+Descartas el primer y el último medio segundo de cada clip (donde ocurren los errores) y 
+unes las partes centrales limpias.
+¿Es grave? Para un proyecto de investigación o personal: No, es aceptable. 
+Para un producto comercial (SOTA): Se suele usar un "overlap" (solapamiento) del 50% y
+ se promedian las predicciones en el medio, 
+pero eso complica mucho el código. Tu enfoque actual es el correcto para empezar.
