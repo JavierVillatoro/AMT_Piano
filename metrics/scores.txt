@@ -133,4 +133,7 @@ Código Antiguo: Usabas 10 segundos (SEGMENT_FRAMES = 320). Esto llenaba tu memo
 IMPLEMENTAR MIR_EVAL_METRICS 
 ME EQUIVOQUE EN METRICS EVAL????? POR AHORA EL MEJOR _HPPNET
 
------HPPNET Mir_eval new and 48 lstm hidden-------
+-----HPPNET_256-------
+HOP_LENGHT = 256, 
+LSTM = 
+HACER MIR_EVAL CUANDO ACABE

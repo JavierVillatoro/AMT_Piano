@@ -4,7 +4,7 @@ import glob
 import sys
 
 
-BASE_DIR = "processed_data_HPPNET"
+BASE_DIR = "processed_data_HPPNET_256"
 
 FOLDERS = {
     "cqt":      os.path.join(BASE_DIR, "inputs_hcqt"),
