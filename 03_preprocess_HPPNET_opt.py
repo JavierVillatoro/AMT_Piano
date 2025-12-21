@@ -12,12 +12,12 @@ from tqdm import tqdm
 # ⚙️ CONFIGURACIÓN FINAL OPTIMIZADA
 # ==========================================
 SR = 16000           # 16 kHz
-HOP_LENGTH = 256     
+HOP_LENGTH = 512     
 
 # Configuración del Piano
 MIN_NOTE = 'A0'      
-N_BINS = 88          
-BINS_PER_OCTAVE = 12 
+N_BINS = 352          
+BINS_PER_OCTAVE = 48
 MIN_MIDI = 21        
 MAX_MIDI = 108       
 NUM_CLASSES = 88     
@@ -216,7 +216,7 @@ def save_verification_plot(audio, hcqt, onsets, frames, velocities, file_id, sav
 
 def procesar_dataset():
     root_path = Path("data/maestro-v3.0.0") 
-    output_base = Path("processed_data_HPPNET_256") 
+    output_base = Path("processed_data_HPPNET") 
     
     folders = ["inputs_hcqt", "targets_onset", "targets_offset", "targets_frame", "targets_velocity"]
     for sub in folders:
@@ -259,14 +259,12 @@ def procesar_dataset():
 
         if onsets is None: continue
 
-        # 3. Guardar COMPRIMIDO (Cambio Clave)
-        np.save(output_base / "inputs_hcqt" / f"{file_id}.npy", hcqt.astype(np.float16))
-        np.save(output_base / "targets_onset" / f"{file_id}.npy", onsets.astype(np.float16))
-        np.save(output_base / "targets_offset" / f"{file_id}.npy", offsets.astype(np.float16))
-        np.save(output_base / "targets_velocity" / f"{file_id}.npy", vels.astype(np.float16))
-        
-        # Frames es binario (0,1), int8 es lo mejor
-        np.save(output_base / "targets_frame" / f"{file_id}.npy", frames.astype(np.int8))
+        # 3. Guardar
+        np.save(output_base / "inputs_hcqt" / f"{file_id}.npy", hcqt)
+        np.save(output_base / "targets_onset" / f"{file_id}.npy", onsets)
+        np.save(output_base / "targets_offset" / f"{file_id}.npy", offsets)
+        np.save(output_base / "targets_frame" / f"{file_id}.npy", frames)
+        np.save(output_base / "targets_velocity" / f"{file_id}.npy", vels)
 
         if viz_count < MAX_VIZ:
             save_verification_plot(audio_raw, hcqt, onsets, frames, vels, file_id, viz_path)
