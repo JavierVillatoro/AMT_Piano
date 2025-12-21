@@ -1,0 +1,2 @@
+epoch,train_loss,val_loss,onset_f1,onset_prec,onset_rec,frame_f1,frame_prec,frame_rec,offset_f1,offset_prec,offset_rec
+1,0.178082,0.151334,0.538960,0.377871,0.939457,0.604925,0.459671,0.884390,0.347742,0.578093,0.248659

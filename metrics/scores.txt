@@ -1,0 +1,136 @@
+------------ CQT + Unet - Bilstm --------------------
+
+🔹 ONSET -> F1: 0.6229 | Prec: 0.5082 | Rec: 0.8044
+🔹 OFFSET -> F1: 0.2942 | Prec: 0.6936 | Rec: 0.1867
+🔹 FRAME -> F1: 0.5922 | Prec: 0.4776 | Rec: 0.7789
+==============================
+RESUMEN DEL DATASET
+==============================
+Total Tracks procesados: 637
+Total Frames (Tiempo):   11555138
+Promedio Frames/Track:   18140
+
+DATASET 50% , 100 epochs 
+
+{'lr': 0.002064477303335853, 'batch_size': 8, 'dropout': 0.3984059063657285, 'onset_weight': 5.757155799157641}
+
+>>> INFORME DETALLADO DEL PRIMER ARCHIVO: 2004_MIDI-Unprocessed_SMF_02_R1_2004_01-05_ORIG_MID--AUDIO_02_R1_2004_08_Track08_wav.npy <<<
+TIPO       | SHAPE           | DTYPE      | MIN      | MAX      | MEAN
+---------------------------------------------------------------------------
+cqt        | (6081, 88)      | float32    | 0.00     | 1.00     | 0.4380
+onset      | (6081, 88)      | float32    | 0.00     | 1.00     | 0.0159
+offset     | (6081, 88)      | float32    | 0.00     | 1.00     | 0.0159
+frame      | (6081, 88)      | int8       | 0.00     | 1.00     | 0.0220
+velocity   | (6081, 88)      | float32    | 0.00     | 0.83     | 0.0028
+---------------------------------------------------------------------------
+
+
+--------- HPPNET ----------
+DATASET 50 % 22 epochs
+
+✅ Ep 22 | T.Loss: 0.1754 | V.Loss: 0.1756
+   🔹 ONSET  -> F1: 0.6788 | Prec: 0.6362 | Rec: 0.7275
+   🔹 FRAME  -> F1: 0.5980 | Prec: 0.4397 | Rec: 0.9343
+   🔹 OFFSET -> F1: 0.3435 | Prec: 0.2968 | Rec: 0.4077
+   💾 ¡Nuevo Récord Onset (0.6787)! Modelo guardado. 
+
+>>> INFORME DETALLADO DEL PRIMER ARCHIVO: 2004_MIDI-Unprocessed_SMF_02_R1_2004_01-05_ORIG_MID--AUDIO_02_R1_2004_05_Track05_wav.npy <<<
+TIPO       | SHAPE           | DTYPE      | MIN      | MAX      | MEAN     
+---------------------------------------------------------------------------
+cqt        | (30301, 88, 3)  | float32    | 0.00     | 1.00     | 0.4446   
+onset      | (30301, 88)     | float32    | 0.00     | 1.00     | 0.0030   
+offset     | (30301, 88)     | float32    | 0.00     | 1.00     | 0.0030   
+frame      | (30301, 88)     | int8       | 0.00     | 1.00     | 0.0219   
+velocity   | (30301, 88)     | float32    | 0.00     | 0.76     | 0.0109
+---------------------------------------------------------------------------
+
+Analizando el resto de archivos (solo se mostrarán errores)...
+
+==============================
+RESUMEN DEL DATASET
+==============================
+Total Tracks procesados: 637
+Total Frames (Tiempo):   11175722
+Promedio Frames/Track:   17544
+
+HCQT armonicos [0.5,1,2]
+SR = 16K 
+
+
+
+------HPPNET_2------
+ Epoch de 2:40 horas y media aprox
+best_model_HPPNET_2
+
+✅ Ep 1 | T.Loss: 0.1781 | V.Loss: 0.1513
+   🔹 ONSET  -> F1: 0.5390 | Prec: 0.3779 | Rec: 0.9395
+   🔹 FRAME  -> F1: 0.6049 | Prec: 0.4597 | Rec: 0.8844
+   🔹 OFFSET -> F1: 0.3477 | Prec: 0.5781 | Rec: 0.2487
+   💾 ¡Nuevo Récord Onset (0.5390)! Modelo guardado.
+{'lr': 0.0007668212439680804, 'onset_weight': 8.634390351609976}
+
+processed_data_HPPNET_2
+20% DATASET 
+N_bins = 48 , lstm = 128 , j_width = 2 , 
+Tratar onset a parte... 
+
+
+-----Opt---------
+Código Nuevo: Usamos 5 segundos (SEGMENT_FRAMES = 160).
+LR encontrado: 0.0005625556514165929 (solo 2 trial)
+
+✅ Ep 1 | T.Loss: 0.1693 | V.Loss: 0.1465
+   🔹 ONSET  -> F1: 0.6464 | Prec: 0.5135 | Rec: 0.8723
+   🔹 FRAME  -> F1: 0.5476 | Prec: 0.3896 | Rec: 0.9210
+   🔹 OFFSET -> F1: 0.2683 | Prec: 0.6151 | Rec: 0.1716
+
+✅ Ep 2 | T.Loss: 0.1365 | V.Loss: 0.1348
+   🔹 ONSET  -> F1: 0.6559 | Prec: 0.5194 | Rec: 0.8894
+   🔹 FRAME  -> F1: 0.6326 | Prec: 0.4962 | Rec: 0.8726
+   🔹 OFFSET -> F1: 0.3645 | Prec: 0.5874 | Rec: 0.2642
+   💾 ¡Nuevo Récord (0.6559)!
+
+¿Por qué es mejor? Para detectar cuándo empieza una nota (onset), no necesitas saber qué pasó hace 9 segundos. Con 5 segundos basta y sobra. 
+Al reducir esto, liberamos memoria para aumentar el Batch Size, que es mucho más importante para la calidad final.
+
+Código Antiguo: Usabas 10 segundos (SEGMENT_FRAMES = 320). Esto llenaba tu memoria VRAM y te obligaba a usar Batch 1.
+
+
+
+
+
+------Kaggle /models_kaggle_HPPNET-----------
+
+✅ Ep 11 [531s] | T.Loss: 0.1246 | V.Loss: 0.1073
+   🔹 ONSET    -> F1: 0.6059 | Prec: 0.4462 | Rec: 0.9433
+   🔹 FRAME    -> F1: 0.6721 | Prec: 0.5375 | Rec: 0.8966
+   🔹 OFFSET   -> F1: 0.4391 | Prec: 0.5954 | Rec: 0.3477
+   🔹 VELOCITY -> MSE: 0.00380 (Error promedio de intensidad)
+   💾 ¡Nuevo Récord Onset (0.6059)! Modelo guardado.
+
+✅ Ep 13 [541s] | T.Loss: 0.1217 | V.Loss: 0.1060
+   🔹 ONSET    -> F1: 0.6108 | Prec: 0.4512 | Rec: 0.9448
+   🔹 FRAME    -> F1: 0.6583 | Prec: 0.5149 | Rec: 0.9123
+   🔹 OFFSET   -> F1: 0.4182 | Prec: 0.6486 | Rec: 0.3086
+   🔹 VELOCITY -> MSE: 0.00381 (Error promedio de intensidad)
+   💾 ¡Nuevo Récord Onset (0.6108)! Modelo guardado.
+
+✅ Ep 16 [528s] | T.Loss: 0.1186 | V.Loss: 0.1049
+   🔹 ONSET    -> F1: 0.6193 | Prec: 0.4609 | Rec: 0.9436
+   🔹 FRAME    -> F1: 0.6675 | Prec: 0.5268 | Rec: 0.9106
+   🔹 OFFSET   -> F1: 0.4343 | Prec: 0.6343 | Rec: 0.3301
+   🔹 VELOCITY -> MSE: 0.00375 (Error promedio de intensidad)
+   💾 ¡Nuevo Récord Onset (0.6193)! Modelo guardado.
+
+✅ Ep 22 [527s] | T.Loss: 0.1144 | V.Loss: 0.1049
+   🔹 ONSET    -> F1: 0.6197 | Prec: 0.4608 | Rec: 0.9462
+   🔹 FRAME    -> F1: 0.6474 | Prec: 0.4980 | Rec: 0.9251
+   🔹 OFFSET   -> F1: 0.4318 | Prec: 0.6482 | Rec: 0.3237
+   🔹 VELOCITY -> MSE: 0.00387 (Error promedio de intensidad)
+   💾 ¡Nuevo Récord Onset (0.6197)! Modelo guardado.
+
+
+IMPLEMENTAR MIR_EVAL_METRICS 
+ME EQUIVOQUE EN METRICS EVAL????? POR AHORA EL MEJOR _HPPNET
+
+-----HPPNET Mir_eval new and 48 lstm hidden-------

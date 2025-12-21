@@ -160,3 +160,20 @@ Cortas con solapamiento: 0-11, 10-21, 20-31...
 
 Descartas el primer y el último medio segundo de cada clip (donde ocurren los errores) y 
 unes las partes centrales limpias.
+
+
+"La arquitectura utiliza una estrategia desacoplada para optimizar el rendimiento en hardware limitado. 
+En la etapa de Preprocesamiento (Input), calculamos explícitamente solo 3 canales HCQT $[0.5, 1, 2]$ 
+para reducir drásticamente el uso de VRAM y almacenamiento, asegurando la captura de la nota fundamental 
+y el control de errores de octava. En contraste, dentro de la Red Neuronal (HDConv), utilizamos 4 tasas de 
+dilatación armónica $[1, 2, 3, 4]$. Esto no requiere 4 canales de entrada, sino que configura los filtros 
+convolucionales para 'mirar' a distancias específicas en el eje de frecuencia. De esta forma, la red aprende
+ a inferir la presencia de armónicos superiores y relaciones interválicas complejas a partir de los datos comprimidos, 
+logrando la capacidad de análisis de un modelo pesado con la ligereza de un input reducido."
+
+
+
+
+
+
+OPTIMIZAR CODIGO PARA SUBIR A COLLAB 

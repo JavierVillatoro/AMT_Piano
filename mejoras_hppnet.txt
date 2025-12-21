@@ -30,4 +30,4 @@ pero eso complica mucho el código. Tu enfoque actual es el correcto para empeza
 
 
 
-Tratar al onset a parte tal y como hacen en hppnet. probar con dataset mas pequeño para no tirarme la vida entera
+Tratar al onset a parte tal y como hacen en hppnet. probar con dataset mas pequeño para no tirarme la vida entera.

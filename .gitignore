@@ -9,5 +9,14 @@ __pycache__/
 amt_piano/
 tareas.txt
 dataset/
-processed_data_2/
+processed_data/
 processed_data_full_dataset/
+processed_data_HPPNET_2/
+
+processed_data_HPPNET/
+
+processed_data_on_grid/
+
+processed_data_HPPNET_full/
+
+songs/
