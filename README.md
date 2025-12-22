@@ -1,4 +1,4 @@
-# AMT Piano Sheet Music - Transcription Project (Deep Learning)
+# AMT Piano
 
 This project implements a **custom Automatic Music Transcription (AMT)** system for piano, designed to work with the **MAESTRO dataset**. 
 
