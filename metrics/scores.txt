@@ -133,6 +133,17 @@ Código Antiguo: Usabas 10 segundos (SEGMENT_FRAMES = 320). Esto llenaba tu memo
 IMPLEMENTAR MIR_EVAL_METRICS 
 ME EQUIVOQUE EN METRICS EVAL????? POR AHORA EL MEJOR _HPPNET
 
--------HPPNET -opt new , new 48 resolution -----------
-30 percent dataset now , antes usaba menos
+-------HPPNET-----
+80 percent
+🏆 Mejores Parámetros: {'lr': 0.00033482407518872575, 'lstm_hidden': 32, 'onset_weight': 1.7804812972478705}
+La clave estará en si tienes un mecanismo para bajar el learning rate cuando la Loss se estanca.
+¿Tienes configurado algún Learning Rate Scheduler en tu código o es fijo?
+
+Usa mir_eval para el test final: Cuando termines las 30 épocas, debes coger tu mejor modelo y 
+pasarle un script que convierta los frames a notas y use la librería mir_eval.
+
+
+-----ReduceLROnPlateau + reduce weight 15 on frame rec---------
+Subir trials optuna y quizas usar 48 lstm , probar mejores parametros y usar kaggle esta vez.
+
 

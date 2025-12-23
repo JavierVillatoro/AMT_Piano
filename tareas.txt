@@ -177,3 +177,7 @@ logrando la capacidad de análisis de un modelo pesado con la ligereza de un inp
 
 
 OPTIMIZAR CODIGO PARA SUBIR A COLLAB 
+
+
+
+RECUPERAR OPT Y HACERLO EN KAGGLE 
