@@ -145,5 +145,7 @@ pasarle un script que convierta los frames a notas y use la librería mir_eval.
 
 -----ReduceLROnPlateau + reduce weight 15 on frame rec---------
 Subir trials optuna y quizas usar 48 lstm , probar mejores parametros y usar kaggle esta vez.
+ver si no mezclo canciones en val training
+Bajar pesos en frame , 15 muy alto , lo mismo no usar pesos? 
 
 
