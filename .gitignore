@@ -10,15 +10,31 @@ amt_piano/
 tareas.txt
 dataset/
 processed_data/
-processed_data_full_dataset/
-processed_data_HPPNET_2/
-
-processed_data_HPPNET/
-
 processed_data_on_grid/
-
-processed_data_HPPNET_full/
-
 songs/
+processed_data_HPPNET_100/
+papers/
 
-processed_data_HPPNET_256/
+processed_data_HPPNET_100.rar
+
+*.rar
+models_kaggles_residual/
+
+*.pyc
+.ipynb_checkpoints/
+*.rar
+*.zip
+*.pth
+*.wav
+*.mp3
+*.mid
+
+# Ignorar audios pesados
+*.mp3
+*.wav
+*.flac
+
+# Ignorar carpetas de generación (según tu lista)
+mis_midis_generados/
+midi_output_hppnet/
+midi_output_residual_kaggle/

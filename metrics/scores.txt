@@ -148,4 +148,57 @@ Subir trials optuna y quizas usar 48 lstm , probar mejores parametros y usar kag
 ver si no mezclo canciones en val training
 Bajar pesos en frame , 15 muy alto , lo mismo no usar pesos? 
 
+------HPPNET_MEJORA -best_hppnet_10-------------------
+
+🏁 Epoch 39 Results:
+   📉 Loss   : Train=0.0524 | Val=0.0587
+   🎹 Onset  : F1=0.7431 | P=0.7262 | R=0.7607
+   🖼️ Frame  : F1=0.6746 | P=0.7453 | R=0.6161
+   🏁 Offset : F1=0.3045 | P=0.1984 | R=0.6543
+   ⚡ Vel    : MSE=0.0052
+   🧠 LR     : 7.50e-05
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.7431)
+--------------------------------------------------------------------------------
+
+
+
+-------MEJORA_kaggle------ 07_training_kaggle.py
+La arquitectura propuesta es una adaptación moderna basada en HPPNet. 
+Se ha sustituido el bloque convolucional estándar por Bloques Residuales 
+para mejorar el flujo del gradiente y evitar la degradación de la señal en capas profundas. 
+Además, se utiliza una entrada HCQT de 3 canales que proporciona información armónica explícita desde el inicio, 
+reduciendo la dependencia de convoluciones dilatadas extremas.
+
+🏁 Epoch 3 Results:
+   📉 Loss    : Train=0.1491 | Val=0.1443
+   🎹 Onset   : F1=0.7981 | P=0.7528 | R=0.8491
+   🖼️ Frame   : F1=0.6356 | P=0.4844 | R=0.9239
+   🏁 Offset  : F1=0.3532 | P=0.2662 | R=0.5245
+   ⚡ Vel     : MSE=0.0045
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.7981)
+
+🏁 Epoch 6 Results:
+   📉 Loss    : Train=0.1364 | Val=0.1391
+   🎹 Onset   : F1=0.8164 | P=0.7923 | R=0.8419
+   🖼️ Frame   : F1=0.6589 | P=0.5135 | R=0.9193
+   🏁 Offset  : F1=0.3692 | P=0.2793 | R=0.5444
+   ⚡ Vel     : MSE=0.0048
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.8164)
+📊 Gráficas guardadas.
+
+--------------------------------------------------------------------------------
+🏁 Epoch 30 Results:
+   📉 Loss    : Train=0.1159 | Val=0.1261
+   🎹 Onset   : F1=0.8357 | P=0.8251 | R=0.8465
+   🖼️ Frame   : F1=0.6792 | P=0.5329 | R=0.9364
+   🏁 Offset  : F1=0.3831 | P=0.2806 | R=0.6033
+   ⚡ Vel     : MSE=0.0036
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.8357)
 

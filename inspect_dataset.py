@@ -8,18 +8,18 @@ import sys
 # ==========================================
 # Detectar ruta automáticamente
 current_dir = pathlib.Path(__file__).parent.absolute()
-if (current_dir / "processed_data").exists():
-    DATA_DIR = current_dir / "processed_data"
-elif (current_dir.parent / "processed_data").exists():
-    DATA_DIR = current_dir.parent / "processed_data"
+if (current_dir / "processed_data_HPPNET").exists():
+    DATA_DIR = current_dir / "processed_data_HPPNET"
+elif (current_dir.parent / "processed_data_HPPNET").exists():
+    DATA_DIR = current_dir.parent / "processed_data_HPPNET"
 else:
-    print("¡ERROR! No se encuentra la carpeta 'processed_data'")
+    print("¡ERROR! No se encuentra la carpeta 'processed_data_HPPNET'")
     sys.exit(1)
 
 print(f"--- ANALIZANDO DATASET EN: {DATA_DIR} ---\n")
 
 # 1. Obtener todos los Inputs
-input_path = DATA_DIR / "inputs_cqt"
+input_path = DATA_DIR / "inputs_hcqt"
 input_files = sorted(glob.glob(str(input_path / "*.npy")))
 total_inputs = len(input_files)
 

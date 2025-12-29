@@ -181,3 +181,32 @@ OPTIMIZAR CODIGO PARA SUBIR A COLLAB
 
 
 RECUPERAR OPT Y HACERLO EN KAGGLE.
+
+
+A diferencia del HPPNet original, este trabajo introduce conexiones residuales 
+en el modelo acústico con el objetivo de mejorar el flujo de gradiente y preservar 
+información temporal fina, especialmente relevante en tareas de transcripción musical 
+automática donde los eventos de onset son breves y escasos. 
+Esta decisión se inspira en arquitecturas profundas modernas y 
+se adapta particularmente bien al uso de representaciones HCQT de alta resolución.
+
+"La arquitectura propuesta, denominada Residual HCQT-HPPNet, representa una evolución moderna del 
+modelo base HPPNet (Park et al., 2019). Mientras que el modelo original se basa en una estructura 
+convolucional puramente secuencial y entradas CQT de un solo canal, este trabajo introduce tres 
+mejoras críticas adaptadas a recursos limitados:
+
+Entrada Rica (HCQT): Se sustituye la CQT por una HCQT de 3 canales, proporcionando 
+información armónica explícita desde la entrada y reduciendo la necesidad de convoluciones con dilataciones extremas.
+
+Conexiones Residuales: Se implementan bloques residuales (ResNet) para mitigar el 
+desvanecimiento del gradiente y preservar la información de alta frecuencia temporal (ataques) en capas profundas.
+
+Desacople de Gradientes (Detach): Se aísla el flujo de gradiente del 'Onset' 
+respecto a las ramas de 'Frame' y 'Offset', evitando que la optimización de la duración 
+degrade la precisión en la detección del ataque."
+
+
+
+"Gracias a las conexiones residuales y la entrada HCQT, el modelo alcanzó un F1 Score de ~0.80 en apenas 3 épocas, 
+demostrando una eficiencia de aprendizaje muy superior a arquitecturas que inician con 'Cold Start' (aprendiendo 
+desde cero sin guía armónica)."
