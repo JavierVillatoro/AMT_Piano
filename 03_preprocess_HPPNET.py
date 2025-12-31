@@ -27,7 +27,7 @@ NUM_CLASSES = 88
 HARMONICS = [0.5, 1, 2] 
 
 # 🔹 HIGH-RESOLUTION LABELS
-J_WIDTH = 1 
+J_WIDTH = 2.5 
 
 def ask_percentage():
     while True:
@@ -216,7 +216,7 @@ def save_verification_plot(audio, hcqt, onsets, frames, velocities, file_id, sav
 
 def procesar_dataset():
     root_path = Path("data/maestro-v3.0.0") 
-    output_base = Path("processed_data_HPPNET_10") 
+    output_base = Path("processed_data_HPPNET_J_2.5") 
     
     folders = ["inputs_hcqt", "targets_onset", "targets_offset", "targets_frame", "targets_velocity"]
     for sub in folders:

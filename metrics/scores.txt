@@ -202,3 +202,12 @@ reduciendo la dependencia de convoluciones dilatadas extremas.
 --------------------------------------------------------------------------------
    💾 Nuevo Récord! Modelo guardado (F1: 0.8357)
 
+
+------
+Probar nuevo hiperparametro j_width = 2.5
+Probar mas bins , ahora 12 , lo suyo 48 ? Para despues...  
+Ver los pesos si tienen sentido para el frame , quito crit_frame y crit_offset , pongo pesos a uno
+Actualizacion funcion tensor_to_notes , antes no estaba offset. 
+Versión ROBUSTA: Usa Onset Peak + (Frame Drop OR Offset Peak)
+
+

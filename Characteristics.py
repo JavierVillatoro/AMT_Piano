@@ -2,11 +2,39 @@ import platform
 import psutil
 import subprocess
 import shutil
+import os  # <--- Necesitamos 'os' para leer rutas
 
 def print_header(title):
     print("\n" + "="*60)
     print(title)
     print("="*60)
+
+# -------------------------------
+# ALMACENAMIENTO (DISCO C:) - ¡NUEVO!
+# -------------------------------
+def disk_info():
+    print_header("ALMACENAMIENTO (Disco Principal)")
+    
+    # Detectamos la ruta raíz dependiendo del sistema operativo
+    # En Windows suele ser 'C:\', en Linux/Mac es '/'
+    ruta = "C:\\" if platform.system() == "Windows" else "/"
+    
+    try:
+        usage = shutil.disk_usage(ruta)
+        
+        gb = 1024**3 # Factor de conversión a Gigabytes
+        
+        print(f"Ruta analizada: {ruta}")
+        print(f"Total:      {usage.total / gb:.2f} GB")
+        print(f"Usado:      {usage.used / gb:.2f} GB")
+        print(f"Disponible: {usage.free / gb:.2f} GB")
+        
+        # Porcentaje visual
+        percent = (usage.used / usage.total) * 100
+        print(f"Porcentaje de uso: {percent:.1f}%")
+        
+    except Exception as e:
+        print(f"No se pudo leer el disco: {e}")
 
 # -------------------------------
 # CPU
@@ -17,7 +45,12 @@ def cpu_info():
     print("Arquitectura:", platform.machine())
     print("Núcleos físicos:", psutil.cpu_count(logical=False))
     print("Núcleos lógicos:", psutil.cpu_count(logical=True))
-    print("Frecuencia CPU (MHz):", psutil.cpu_freq().current)
+    try:
+        freq = psutil.cpu_freq()
+        if freq:
+            print(f"Frecuencia CPU (MHz): {freq.current:.2f}")
+    except:
+        print("Frecuencia CPU: No disponible")
 
 # -------------------------------
 # RAM
@@ -37,7 +70,7 @@ def gpu_info():
         import GPUtil
         gpus = GPUtil.getGPUs()
         if not gpus:
-            print("No se detectó ninguna GPU NVIDIA.")
+            print("No se detectó ninguna GPU NVIDIA (vía GPUtil).")
             return
         for gpu in gpus:
             print(f"ID GPU: {gpu.id}")
@@ -48,22 +81,22 @@ def gpu_info():
             print(f"Temperatura: {gpu.temperature} °C")
             print("-" * 40)
     except ImportError:
-        print("GPUtil no está instalado. Instálalo con: pip install gputil")
+        print("GPUtil no está instalado. (Opcional, pero recomendado)")
 
 # -------------------------------
 # CUDA
 # -------------------------------
 def cuda_info():
     print_header("CUDA INFO")
-    # Chequear si existe comando nvidia-smi
     if shutil.which("nvidia-smi"):
         try:
+            # Ejecutamos nvidia-smi pero solo mostramos las primeras líneas para no saturar
             output = subprocess.check_output(["nvidia-smi"], encoding="utf-8")
-            print(output)
+            print(output) 
         except Exception:
             print("Error al ejecutar nvidia-smi.")
     else:
-        print("nvidia-smi no encontrado. Probablemente no tienes CUDA o GPU NVIDIA.")
+        print("nvidia-smi no encontrado.")
 
 # -------------------------------
 # Python / Deep Learning libs
@@ -88,7 +121,8 @@ def dl_libs_info():
     try:
         import tensorflow as tf
         print("TensorFlow:", tf.__version__)
-        print("GPU disponible (TensorFlow):", tf.config.list_physical_devices('GPU'))
+        gpus = tf.config.list_physical_devices('GPU')
+        print(f"GPU disponible (TensorFlow): {'Sí' if gpus else 'No'} ({len(gpus)} detectadas)")
     except ImportError:
         print("TensorFlow no está instalado.")
 
@@ -98,6 +132,7 @@ def dl_libs_info():
 if __name__ == "__main__":
     cpu_info()
     ram_info()
+    disk_info()  # <--- AÑADIDO AQUÍ
     gpu_info()
     cuda_info()
     dl_libs_info()
