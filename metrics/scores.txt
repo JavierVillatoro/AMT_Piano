@@ -203,11 +203,584 @@ reduciendo la dependencia de convoluciones dilatadas extremas.
    💾 Nuevo Récord! Modelo guardado (F1: 0.8357)
 
 
-------
-Probar nuevo hiperparametro j_width = 2.5
-Probar mas bins , ahora 12 , lo suyo 48 ? Para despues...  
-Ver los pesos si tienen sentido para el frame , quito crit_frame y crit_offset , pongo pesos a uno
-Actualizacion funcion tensor_to_notes , antes no estaba offset. 
-Versión ROBUSTA: Usa Onset Peak + (Frame Drop OR Offset Peak)
+-----MODEL_4_H-------------------
+Usar focalloss en offset??? 
+
+------Preprocess
+Añadir 1 armónico más (3)
+HARMONICS = [0.5, 1, 2, 3]
+Ajustar offset labels (+1 frame)
+end_frame_float = (note.end / time_per_frame) + 1.0  
+
+------training
+model = HPPNet(in_channels=4, lstm_hidden=128).to(DEVICE)
+-Probar threshold_frame=0.6 para mejorar recall(O precision)
+
+est = tensor_to_notes(pr_on[i].cpu().numpy(), pr_fr[i].cpu().numpy(),pr_off[i].cpu().numpy(), v_map, t_onset=THRESHOLD_ONSET, t_frame=THRESHOLD_FRAME,t_offset=THRESHOLD_OFFSET)
+cambio en tensor_to_note para dar estabilidad y usar cabezal offset 
+--------------------------------------------------------------------------------
+🏁 Epoch 3 Results:
+   📉 Loss    : Train=0.1557 | Val=0.1523
+   🎹 Onset   : F1=0.8669 | P=0.8760 | R=0.8580
+   🖼️ Frame   : F1=0.6898 | P=0.5591 | R=0.9002
+   🏁 Offset  : F1=0.3435 | P=0.2511 | R=0.5437
+   ⚡ Vel     : MSE=0.0047
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.8669)
+--------------------------------------------------------------------------------
+🏁 Epoch 15 Results:
+   📉 Loss    : Train=0.1282 | Val=0.1332
+   🎹 Onset   : F1=0.8979 | P=0.9235 | R=0.8736
+   🖼️ Frame   : F1=0.7272 | P=0.6021 | R=0.9180
+   🏁 Offset  : F1=0.3764 | P=0.2768 | R=0.5880
+   ⚡ Vel     : MSE=0.0037
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.8979)
+
+   --------------------------------------------------------------------------------
+🏁 Epoch 30 Results:
+   📉 Loss    : Train=0.1201 | Val=0.1276
+   🎹 Onset   : F1=0.8936 | P=0.9080 | R=0.8797
+   🖼️ Frame   : F1=0.7280 | P=0.5989 | R=0.9280
+   🏁 Offset  : F1=0.3738 | P=0.2661 | R=0.6280
+   ⚡ Vel     : MSE=0.0034
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+
+
+
+
+----- 6_h_DICE-------------
+Probar añadir mas harmonicos en hdconv??? 
+class HDConv(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.convs = nn.ModuleList()
+        # AÑADIDO: Armónicos 5 y 6 para mayor definición de timbre
+        harmonics = [1, 2, 3, 4, 5, 6] 
+        
+        for h in harmonics:
+            if h == 1:
+                d = 1 
+            else:
+                # Cuidado: log2(h) debe dar un entero razonable. 
+                # Para 3, 5, 6 redondeamos.
+                d = int(np.round(BINS_PER_OCTAVE * np.log2(h)))
+            
+            # Padding para mantener dimensiones: (d, 1)
+            self.convs.append(nn.Conv2d(
+                in_channels, out_channels, 
+                kernel_size=(3, 3), 
+                padding=(d, 1), 
+                dilation=(d, 1)
+            ))
+            
+        self.fusion = nn.Sequential(
+            nn.Conv2d(out_channels, out_channels, kernel_size=1),
+            nn.InstanceNorm2d(out_channels, affine=True),
+            nn.ReLU()
+        )
+
+    def forward(self, x):
+        # Sumamos todas las convoluciones armónicas
+        x_sum = sum([conv(x) for conv in self.convs])
+        return self.fusion(x_sum)
+
+----CONEXION FRAME-OFFSET
+class HPPNet(nn.Module):
+    def __init__(self, in_channels=4, base_channels=24, lstm_hidden=128):
+        super().__init__()
+        self.acoustic_onset = AcousticModel(in_channels, base_channels)
+        self.acoustic_other = AcousticModel(in_channels, base_channels)
+        
+        self.head_onset = FG_LSTM(base_channels, lstm_hidden)
+        
+        concat_dim = base_channels * 2
+        self.head_frame = FG_LSTM(concat_dim, lstm_hidden)
+        
+        # CAMBIO: El offset recibe (Features + Predicción Frame) = concat_dim + 1
+        # Esto ayuda al Offset a saber si la nota está activa
+        self.head_offset = FG_LSTM(concat_dim + 1, lstm_hidden) 
+        
+        self.head_velocity = FG_LSTM(concat_dim, lstm_hidden)
+
+    def forward(self, x):
+        feat_onset = self.acoustic_onset(x)
+        logits_onset = self.head_onset(feat_onset)
+        
+        feat_onset_detached = feat_onset.detach()
+        feat_other = self.acoustic_other(x)
+        feat_combined = torch.cat([feat_other, feat_onset_detached], dim=1)
+        
+        logits_frame = self.head_frame(feat_combined)
+        
+        # --- TRUCO MAESTRO PARA OFFSET ---
+        # Pasamos la probabilidad del Frame como una característica extra al Offset
+        prob_frame = torch.sigmoid(logits_frame).detach() # Detach para no romper gradientes del frame
+        # Necesitamos ajustar dimensiones para concatenar: [B, 1, F, T]
+        # FG_LSTM devuelve [B, 88, T], hay que reajustarlo si usas esa forma
+        # Asumiendo que FG_LSTM devuelve [B, 88, T], permutar a [B, 1, 88, T] es complejo dentro de la red
+        # SIMPLIFICACIÓN: Hacemos el gating al final o concatenamos antes del LSTM si las dims coinciden.
+        
+        # Alternativa más segura sin romper dimensiones de tu LSTM actual:
+        # Usamos el feat_combined original PERO multiplicamos la salida final
+        logits_offset = self.head_offset(torch.cat([feat_combined, prob_frame.unsqueeze(1)], dim=1))
+        
+        logits_velocity = self.head_velocity(feat_combined)
+        
+        return logits_onset, logits_frame, logits_offset, logits_velocity
+
+IMPLEMENTACION DICE_LOSS 
+--------------------------------------------------------------------------------
+🏁 Epoch 3 Results:
+   📉 Loss    : Train=0.4643 | Val=0.4539
+   🎹 Onset   : F1=0.8735 | P=0.8925 | R=0.8552
+   🖼️ Frame   : F1=0.7559 | P=0.7052 | R=0.8144
+   🏁 Offset  : F1=0.3548 | P=0.2636 | R=0.5424
+   ⚡ Vel     : MSE=0.0070
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.8735)
+
+--------------------------------------------------------------------------------
+🏁 Epoch 6 Results:
+   📉 Loss    : Train=0.4259 | Val=0.4216
+   🎹 Onset   : F1=0.8991 | P=0.9435 | R=0.8586
+   🖼️ Frame   : F1=0.7700 | P=0.7128 | R=0.8371
+   🏁 Offset  : F1=0.3837 | P=0.2992 | R=0.5347
+   ⚡ Vel     : MSE=0.0044
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.8991)
+📊 Gráficas guardadas.
+
+--------------------------------------------------------------------------------
+🏁 Epoch 9 Results:
+   📉 Loss    : Train=0.4079 | Val=0.4077
+   🎹 Onset   : F1=0.9067 | P=0.9463 | R=0.8702
+   🖼️ Frame   : F1=0.7814 | P=0.7372 | R=0.8311
+   🏁 Offset  : F1=0.3983 | P=0.3212 | R=0.5242
+   ⚡ Vel     : MSE=0.0045
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.9067)
+
+--------------------------------------------------------------------------------
+🏁 Epoch 15 Results:
+   📉 Loss    : Train=0.3879 | Val=0.3996
+   🎹 Onset   : F1=0.9029 | P=0.9486 | R=0.8615
+   🖼️ Frame   : F1=0.7893 | P=0.7579 | R=0.8234
+   🏁 Offset  : F1=0.3986 | P=0.3102 | R=0.5577
+   ⚡ Vel     : MSE=0.0041
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+🚀 HPPNET-SP RESUMING TRAINING (cuda)
+🔹 Config: Batch Size 32 | LR 0.0001 | Patience 1
+HE BAJADO EL THRESHOLD_FRAME = 0.35 , THRESHOLD_OFFSET = 0.4 , THRESHOLD_ONSET = 0.35
+--------------------------------------------------------------------------------
+🏁 Epoch 3 Results (Resumed):
+   📉 Loss     : Train=0.3707 | Val=0.3869
+   🎹 Onset    : F1=0.9054 | P=0.9267 | R=0.8851
+   🖼️ Frame    : F1=0.7690 | P=0.6736 | R=0.8958
+   🏁 Offset   : F1=0.4003 | P=0.3066 | R=0.5764
+   ⚡ Vel      : MSE=0.0036
+   🧠 LR       : 1.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.9054)
+
+--------------------------------------------------------------------------------
+🏁 Epoch 6 Results (Resumed):
+   📉 Loss     : Train=0.3678 | Val=0.3865
+   🎹 Onset    : F1=0.9106 | P=0.9382 | R=0.8845
+   🖼️ Frame    : F1=0.7719 | P=0.6800 | R=0.8926
+   🏁 Offset   : F1=0.4016 | P=0.3089 | R=0.5738
+   ⚡ Vel      : MSE=0.0036
+   🧠 LR       : 1.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.9106)
+
+
+
+
+
+
+
+------------ 6_h_high_res ------------
+---------
+------SpecAugment aplicar solo en train-loader , no en val-loader???? no es seguro aun 
+------Reemplazar FG_LSTM por TemporalTransformer en cada head ??? 
+------Pitch Shifting: Cambiar el tono ligeramente (ayuda a generalizar).
+------Velocity Scaling
+------AÑADIR PEDAL , PROBAR CON DATASET PEQUEÑO PARA VER SI LO RECONOCE , DEBUG VISUALIZATION ALSO
+
+ 
+para decidir si un frame está activo o no.Como el piano decae, la probabilidad que predice el 
+modelo baja gradualmente: 0.9 -> 0.7 -> 0.4 -> 0.1.Si cortas en 0.5, pierdes la cola de la nota (donde la prob es 0.4).
+Prueba: Baja el umbral de activación de Frames a 0.3 o 0.4 en tu validación. A menudo esto recupera la cola de la nota y sube el Recall de Frames (y por tanto el F1) sin afectar mucho la precisión.
+
+Si bajas el LR y sigue sin mejorar, es hora de meter un poco más de Regularización 
+(Dropout o Weight Decay) o aumentar el Data Augmentation (cambios de tono, velocidad o EQ en el audio).
+
+------Bajar patient lo mismo viene hasta bien o que
+------Bajar threshold_frame
+------PROBLEMA CON NO SUSTAIN DE LAS NOTAS , BCE MEJOR??? DICE CON PESO MAYOR???? QUIZAS 15.0???? 
+------Quitar el + 1.0 de preproccess? 
+------crit_frame = ComboLoss(bce_weight=20.0).to(DEVICE) ?? 
+
+------AÑADIR PEDAL , PROBAR CON DATASET PEQUEÑO PARA VER SI LO RECONOCE , DEBUG VISUALIZATION ALSO
+------ Ver si logica de J estoy haciendo bien o no
+
+NO USAR FIND PEAKS , ESTA MAL , USAR HIGH RES MEJOR PARA ONSET Y OFFSET 
+QUITAR +1.0 DEL PREPROCESS end_frame_float = (note.end / time_per_frame) + 1.0 , NO BUENA IDEA PARA HIGH RES
+Ver si codigo bien implementado high res 6 h
+
+Recomendación: Cámbialo a BCEWithLogitsLoss normal, igual que tienes en el Offset.
+¿Por qué? El paper usa regresión (formas triangulares). La FocalLoss se enfoca en ejemplos difíciles (hard mining), 
+lo cual es genial para clasificación binaria desbalanceada, pero puede distorsionar la pendiente suave del triángulo 
+($0.8, 0.6, \dots$) que necesitamos para que la fórmula refine_time funcione con precisión matemática.
+
+
+DIVIDIR EN ARCHIVOS MAS PEQUEÑOS EL .RAR PARA SUBIR A Kaggle
+if h == 1:
+    d = 0     #AQUI HABIA ERROR 
+else:
+    d = int(np.round(BINS_PER_OCTAVE * np.log2(h)))
+
+return {"hcqt": torch.zeros(4, 88, SEGMENT_FRAMES), ...} #AQUI TENIA 3 
+
+
+
+
+
+
+
+
+----------
+HOP_LENGTH = 256  # ~16 ms
+Entonces sí tendría sentido:
+J_WIDTH = 4 o 5
+
+
+
+------6_h_dice_2
+Patiente = 1
+factor = 0.6
+THRESHOLD_ONSET = 0.35   
+THRESHOLD_FRAME = 0.35     
+THRESHOLD_OFFSET = 0.4
+loss = (10.0 * l_on) + l_fr + (10.0 * l_off) + l_vel
+v_loss += ((10.0 * l_on) + l_fr + (10.0 * l_off) + l_vel).item()
+crit_frame = ComboLoss(bce_weight=2.0).to(DEVICE)
+crit_offset = FocalLoss(alpha=0.75, gamma=2.0).to(DEVICE)
+
+QUIZAS PROBAR A USAR OPTUNA A LO HEAVY? 
+
+--------------------------------------------------------------------------------
+🏁 Epoch 3 Results:
+   📉 Loss    : Train=0.3568 | Val=0.3494
+   🎹 Onset   : F1=0.8850 | P=0.9082 | R=0.8630
+   🖼️ Frame   : F1=0.7574 | P=0.7248 | R=0.7930
+   🏁 Offset  : F1=0.3763 | P=0.3366 | R=0.4266
+   ⏱️ Note Offset : F1=0.5846 | P=0.5999 | R=0.5700
+   ⚡ Vel     : MSE=0.0061
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.8850)
+
+--------------------------------------------------------------------------------
+🏁 Epoch 6 Results:
+   📉 Loss    : Train=0.3266 | Val=0.3263
+   🎹 Onset   : F1=0.9075 | P=0.9388 | R=0.8782
+   🖼️ Frame   : F1=0.7679 | P=0.7132 | R=0.8318
+   🏁 Offset  : F1=0.3998 | P=0.3803 | R=0.4215
+   ⏱️ Note Offset : F1=0.6094 | P=0.6304 | R=0.5897
+   ⚡ Vel     : MSE=0.0043
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.9075)
+
+--------------------------------------------------------------------------------
+🏁 Epoch 9 Results:
+   📉 Loss    : Train=0.3126 | Val=0.3136
+   🎹 Onset   : F1=0.9141 | P=0.9497 | R=0.8812
+   🖼️ Frame   : F1=0.7852 | P=0.7732 | R=0.7977
+   🏁 Offset  : F1=0.4107 | P=0.4047 | R=0.4168
+   ⏱️ Note Offset : F1=0.6299 | P=0.6544 | R=0.6072
+   ⚡ Vel     : MSE=0.0042
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.9141)
+
+🏁 Epoch 12 Results:
+   📉 Loss    : Train=0.3034 | Val=0.3126
+   🎹 Onset   : F1=0.9155 | P=0.9440 | R=0.8887
+   🖼️ Frame   : F1=0.7858 | P=0.7747 | R=0.7972
+   🏁 Offset  : F1=0.4125 | P=0.3681 | R=0.4690
+   ⏱️ Note Offset : F1=0.6467 | P=0.6669 | R=0.6278
+   ⚡ Vel     : MSE=0.0041
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.9155)
+
+--------------------------------------------------------------------------------
+🏁 Epoch 15 Results:
+   📉 Loss    : Train=0.2968 | Val=0.3020
+   🎹 Onset   : F1=0.9173 | P=0.9450 | R=0.8912
+   🖼️ Frame   : F1=0.7910 | P=0.7658 | R=0.8179
+   🏁 Offset  : F1=0.4219 | P=0.3974 | R=0.4496
+   ⏱️ Note Offset : F1=0.6417 | P=0.6611 | R=0.6234
+   ⚡ Vel     : MSE=0.0040
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.9173)  EMPEORA NOTE OFFSET ....
+
+--------------------------------------------------------------------------------
+🏁 Epoch 30 Results:
+   📉 Loss    : Train=0.2786 | Val=0.2914
+   🎹 Onset   : F1=0.9238 | P=0.9517 | R=0.8975
+   🖼️ Frame   : F1=0.7948 | P=0.7489 | R=0.8467
+   🏁 Offset  : F1=0.4303 | P=0.3937 | R=0.4744
+   ⏱️ Note Offset : F1=0.6470 | P=0.6665 | R=0.6286
+   ⚡ Vel     : MSE=0.0038
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.9238)
+
+--------------------------------------------------------------------------------
+🏁 Epoch 33 Results:
+   📉 Loss    : Train=0.2764 | Val=0.2919
+   🎹 Onset   : F1=0.9245 | P=0.9551 | R=0.8957
+   🖼️ Frame   : F1=0.7929 | P=0.7411 | R=0.8524
+   🏁 Offset  : F1=0.4326 | P=0.4039 | R=0.4658
+   ⏱️ Note Offset : F1=0.6469 | P=0.6683 | R=0.6268
+   ⚡ Vel     : MSE=0.0036
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.9245)
+
+
+-----RESUME---- LR=0.0001
+--------------------------------------------------------------------------------
+🏁 Epoch 3 Results:
+   📉 Loss    : Train=0.2646 | Val=0.2858
+   🎹 Onset   : F1=0.9249 | P=0.9460 | R=0.9047
+   🖼️ Frame   : F1=0.7999 | P=0.7609 | R=0.8431
+   🏁 Offset  : F1=0.4344 | P=0.3938 | R=0.4844
+   ⏱️ Note Offset : F1=0.6565 | P=0.6714 | R=0.6421
+   ⚡ Vel     : MSE=0.0034
+   🧠 LR      : 1.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord de Note-Offset! Modelo guardado (Note Off F1: 0.6565)
+--------------------------------------------------------------------------------
+🏁 Epoch 6 Results:
+   📉 Loss    : Train=0.2631 | Val=0.2860
+   🎹 Onset   : F1=0.9265 | P=0.9536 | R=0.9009
+   🖼️ Frame   : F1=0.8005 | P=0.7649 | R=0.8397
+   🏁 Offset  : F1=0.4355 | P=0.3959 | R=0.4839
+   ⏱️ Note Offset : F1=0.6590 | P=0.6782 | R=0.6408
+   ⚡ Vel     : MSE=0.0033
+   🧠 LR      : 1.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord de Note-Offset! Modelo guardado (Note Off F1: 0.6590)
+
+--------------------------------------------------------------------------------
+🏁 Epoch 9 Results:
+   📉 Loss    : Train=0.2621 | Val=0.2863
+   🎹 Onset   : F1=0.9261 | P=0.9537 | R=0.9001
+   🖼️ Frame   : F1=0.8002 | P=0.7642 | R=0.8399
+   🏁 Offset  : F1=0.4355 | P=0.3955 | R=0.4846
+   ⏱️ Note Offset : F1=0.6612 | P=0.6808 | R=0.6426
+   ⚡ Vel     : MSE=0.0033
+   🧠 LR      : 1.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord de Note-Offset! Modelo guardado (Note Off F1: 0.6612)
+
+--------------------------------------------------------------------------------
+🏁 Epoch 15 Results:
+   📉 Loss    : Train=0.2605 | Val=0.2872
+   🎹 Onset   : F1=0.9255 | P=0.9536 | R=0.8990
+   🖼️ Frame   : F1=0.8021 | P=0.7777 | R=0.8281
+   🏁 Offset  : F1=0.4356 | P=0.3966 | R=0.4830
+   ⏱️ Note Offset : F1=0.6656 | P=0.6858 | R=0.6465
+   ⚡ Vel     : MSE=0.0035
+   🧠 LR      : 1.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord de Note-Offset! Modelo guardado (Note Off F1: 0.6656)
+
+
+GUARDAR LATEST CHECKPOINT Y CAMBIAR LOGICA PARA GUARDAR EL MEJOR NOTE_OFFSET_F1
+
+
+
+
+----------
+Te recomiendo encarecidamente que cambies el bloque de guardado para monitorear note_off_f1
+En vez de guardar mejor f1 onset , guardar note_offset para siguiente , cambiar algunos hiper_parametros
+
+Cambiar hop_length???
+
+Cambiar a 95 por ciento training y 5 por ciento validation? 
+Data augmentation , pitch , cambiar sonido , etc 
+A. Time Stretching
+B. Pitch Shifting
+C. Datos Sintéticos
+E. Propias grabaciones , con microfono tambien a parte de midi 
+
+Dataset PiJAMA 
+
+TRANSFORMER CROSS-ATTENTION 
+
+
+
+
+--------------
+Probar CQT de alta resolucion a ver que pasa 
+48 bins
+add maxpool
+--------------------------------------------------------------------------------
+🏁 Epoch 3 Results:
+   📉 Loss    : Train=0.2997 | Val=0.2899
+   🎹 Onset   : F1=0.9426 | P=0.9550 | R=0.9304
+   🖼️ Frame   : F1=0.7901 | P=0.7437 | R=0.8427
+   🏁 Offset  : F1=0.3505 | P=0.3513 | R=0.3497
+   ⏱️ Note Offset : F1=0.6561 | P=0.6647 | R=0.6476
+   🚀 Note Off+Vel: F1=0.6104 | P=0.6185 | R=0.6026
+   ⚡ Vel     : MSE=0.0039
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.9426)
+--------------------------------------------------------------------------------
+🏁 Epoch 6 Results:
+   📉 Loss    : Train=0.2761 | Val=0.2809
+   🎹 Onset   : F1=0.9502 | P=0.9679 | R=0.9332
+   🖼️ Frame   : F1=0.8017 | P=0.7875 | R=0.8163
+   🏁 Offset  : F1=0.3653 | P=0.3597 | R=0.3711
+   ⏱️ Note Offset : F1=0.6924 | P=0.7053 | R=0.6800
+   🚀 Note Off+Vel: F1=0.6520 | P=0.6641 | R=0.6403
+   ⚡ Vel     : MSE=0.0036
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (F1: 0.9502)
+
+--------------------------------------------------------------------------------
+🏁 Epoch 9 Results:
+   📉 Loss    : Train=0.2650 | Val=0.2674
+   🎹 Onset   : F1=0.9547 | P=0.9741 | R=0.9360
+   🖼️ Frame   : F1=0.8052 | P=0.7539 | R=0.8638
+   🏁 Offset  : F1=0.3722 | P=0.3775 | R=0.3671
+   ⏱️ Note Offset : F1=0.6960 | P=0.7102 | R=0.6824
+   🚀 Note Off+Vel: F1=0.6593 | P=0.6728 | R=0.6465
+   ⚡ Vel     : MSE=0.0034
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord (Note Offset)! Modelo guardado (F1: 0.6960)
+📊 Gráficas guardadas.
+
+--------------------------------------------------------------------------------
+🏁 Epoch 12 Results:
+   📉 Loss    : Train=0.2579 | Val=0.2623
+   🎹 Onset   : F1=0.9542 | P=0.9626 | R=0.9459
+   🖼️ Frame   : F1=0.8077 | P=0.7532 | R=0.8707
+   🏁 Offset  : F1=0.3789 | P=0.3473 | R=0.4167
+   ⏱️ Note Offset : F1=0.7041 | P=0.7104 | R=0.6980
+   🚀 Note Off+Vel: F1=0.6695 | P=0.6754 | R=0.6636
+   ⚡ Vel     : MSE=0.0032
+   🧠 LR      : 6.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord (Note Offset)! Modelo guardado (F1: 0.7041)
+
+----- GUARDAR LAST_CHECKPOINT Y HACER GUARDADO DE FRAME -----
+----- CAMBAIR LR DESPUES ------
+lr = 0.0001
+----- PROBAR OTROS PESOS ------ CURRICULUM LEARNING ------
+loss = (1.0 * l_on) + (5.0 * l_fr) + (5.0 * l_off) + l_vel 
+v_loss += ((1.0 * l_on) + (5.0 * l_fr) + (5.0 * l_off) + l_vel).item()
+----- CAMBIAR GUARDADO --------
+frame_f1 para el scheduler
+
+
+Ablation study formal 
+Variante	Frame F1	Note F1	Note+Off	Note+Vel
+sin HDConv				
+sin Residual				
+sin FG-LSTM				
+tu modelo
+
+
+
+
+
+
+-------
+APLICAR ALGORITMO DE HIGH RES EN VEZ DE FIND PEAKS 
+"Optamos por un enfoque basado en frames (frame-based approach) con una alta resolución temporal de 20ms. 
+Aunque existen enfoques de regresión continua, la literatura demuestra que un grid de 20ms es suficiente 
+para superar el umbral de percepción humana en la transcripción (tolerancia estándar de 50ms) y ofrece una 
+estabilidad de convergencia superior durante el entrenamiento."
+
+Agrega novelty (e.g., attention en LSTM).
+
+CAMBIO A: Añadir weight_decay al Optimizador (Para frenar la subida de Loss)
+# Añadimos weight_decay=1e-4 para regularizar y evitar que la val_loss suba
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
+
+CAMBIO B: Ajustar la Decodificación de Notas (Para recuperar Offset)
+Como tus offsets ahora son más "borrosos" por la alta resolución, tu lógica de "buscar un pico de offset" (is_offset_hit) 
+es demasiado estricta. Vamos a relajarla para que confíe un poco más en la caída de la predicción de frame.
+
+def tensor_to_notes(onset_pred, frame_pred, offset_pred, velocity_pred=None, t_onset=0.35, t_frame=0.35, t_offset=0.30): # <--- t_offset bajado ligeramente
+    notes = []
+    for pitch in range(88):
+        # 1. Peak Picking Onset
+        peaks, _ = find_peaks(onset_pred[:, pitch], height=t_onset, distance=2)
+        
+        for onset_frame in peaks:
+            # 2. Verificar que hay sustain inmediatamente después
+            if onset_frame + 1 >= frame_pred.shape[0]: continue
+            if frame_pred[onset_frame + 1, pitch] < t_frame: continue 
+                
+            # 3. Buscar Offset (Lógica High-Res)
+            end_frame = onset_frame + 1
+            max_len = frame_pred.shape[0]
+            
+            while end_frame < max_len:
+                frame_val = frame_pred[end_frame, pitch]
+                offset_val = offset_pred[end_frame, pitch]
+                
+                # CONDICIÓN DE PARADA 1: Detectamos un Offset explícito fuerte
+                if offset_val > t_offset:
+                    # Compensación: Los offsets suelen detectarse un pelín tarde en High-Res
+                    # Sumamos 1 frame extra para cubrir la cola
+                    end_frame = min(end_frame + 1, max_len) 
+                    break
+                
+                # CONDICIÓN DE PARADA 2: El frame cae drásticamente (silencio)
+                # Usamos un umbral de "corte" más bajo que el de "mantenimiento"
+                if frame_val < (t_frame * 0.8): 
+                    break
+                
+                end_frame += 1
+            
+            # 4. Filtro de duración mínima (aprox 30ms)
+            if end_frame - onset_frame > 2:
+                onset_time = onset_frame * HOP_LENGTH / SR
+                offset_time = end_frame * HOP_LENGTH / SR
+                
+                # 5. Velocity
+                vel = 0
+                if velocity_pred is not None:
+                    # Miramos un poco más lejos para coger bien el ataque
+                    vel_seg = velocity_pred[onset_frame:min(end_frame, onset_frame+5), pitch]
+                    vel = np.mean(vel_seg) if len(vel_seg) > 0 else 0
+                
+                notes.append([onset_time, offset_time, pitch + 21, vel])
+    return notes
+
+
+------ Lo ultimo lo empeoró , buscar otras opciones -----
+
+
 
 

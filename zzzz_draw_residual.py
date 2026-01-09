@@ -1,167 +1,118 @@
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-def draw_professional_architecture(save_path="hcqt_residual_hppnet_paper.png"):
-    # --- Configuración del Lienzo ---
-    fig, ax = plt.subplots(figsize=(14, 16))
-    ax.set_xlim(0, 100)
-    ax.set_ylim(0, 100)
+def draw_architecture_diagram():
+    # Configuración de la figura
+    fig, ax = plt.subplots(figsize=(12, 18))
+    ax.set_xlim(0, 12)
+    ax.set_ylim(0, 24)
     ax.axis('off')
     
-    # --- Paleta de Colores (Estilo Académico Moderno) ---
-    c_h05 = '#FFCDD2'  # Rojo suave (Canal 1)
-    c_h1  = '#C8E6C9'  # Verde suave (Canal 2)
-    c_h2  = '#BBDEFB'  # Azul suave (Canal 3)
+    # --- Estilos ---
+    # Colores académicos (suaves)
+    c_input = '#FFDDC1'   # Naranja suave (Datos)
+    c_high = '#C1E1FF'    # Azul suave (High Res Processing)
+    c_pool = '#FFABAB'    # Rojo suave (Cambio dimensión)
+    c_low = '#C1C6FF'     # Violeta suave (Low Res Context)
+    c_head = '#D0F0C0'    # Verde suave (Salidas)
+    c_midi = '#E1C1FF'    # Morado (Resultado final)
     
-    c_onset_bg = '#E3F2FD' # Fondo azulado para rama Onset
-    c_other_bg = '#FFF3E0' # Fondo anaranjado para rama Other
-    
-    c_block = '#FFFFFF'    # Bloques blancos
-    c_hdc   = '#D1C4E9'    # HDConv (Violeta suave)
-    c_lstm  = '#F0F0F0'    # Gris muy claro
-    c_edge  = '#333333'    # Bordes oscuros
-    
-    # --- Funciones de Dibujo ---
-    def draw_box(x, y, w, h, color, label, sublabel=None, fontsize=10, style="round,pad=0.3"):
-        box = patches.FancyBboxPatch((x, y), w, h, boxstyle=style, 
-                                     linewidth=1.2, edgecolor=c_edge, facecolor=color, zorder=3)
+    # Estilo de caja
+    def draw_box(x, y, w, h, title, sub, color):
+        # Sombra
+        shadow = patches.FancyBboxPatch((x+0.1, y-0.1), w, h, boxstyle="round,pad=0.2", 
+                                       ec="none", fc='gray', alpha=0.3)
+        ax.add_patch(shadow)
+        # Caja principal
+        box = patches.FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.2", 
+                                     ec="black", fc=color, linewidth=1.5)
         ax.add_patch(box)
-        ax.text(x + w/2, y + h/2 + (1.5 if sublabel else 0), label, 
-                ha='center', va='center', fontsize=fontsize, fontweight='bold', color='#222', zorder=4)
-        if sublabel:
-            ax.text(x + w/2, y + h/2 - 1.5, sublabel, 
-                    ha='center', va='center', fontsize=fontsize-2, style='italic', color='#555', zorder=4)
-        return (x + w/2, y) # Return bottom center
+        # Texto
+        ax.text(x + w/2, y + h*0.65, title, ha='center', va='center', fontsize=11, fontweight='bold')
+        ax.text(x + w/2, y + h*0.35, sub, ha='center', va='center', fontsize=9, family='monospace')
 
-    def draw_arrow(x1, y1, x2, y2, style='->', ls='-', color='#444'):
-        ax.annotate("", xy=(x2, y2), xytext=(x1, y1),
-                    arrowprops=dict(arrowstyle=style, color=color, lw=1.5, linestyle=ls, shrinkA=0, shrinkB=0),
-                    zorder=2)
+    # Estilo de flecha
+    def draw_arrow(x_from, y_from, x_to, y_to):
+        ax.annotate("", xy=(x_to, y_to), xytext=(x_from, y_from),
+                    arrowprops=dict(arrowstyle="->", lw=1.5, color='black'))
 
     # ==========================================
-    # 1. INPUT HCQT (REPRESENTACIÓN 3D)
+    # DIBUJO DEL PIPELINE (De arriba a abajo)
     # ==========================================
-    # Dibujamos 3 capas apiladas para que sea OBVIO que es HCQT
-    start_x, start_y = 42, 90
-    w_lay, h_lay = 16, 6
-    offset = 1.5
     
-    # Capa h=2
-    draw_box(start_x + 2*offset, start_y + 2*offset, w_lay, h_lay, c_h2, "Ch 2: h=2.0", "Harmonic", style="square")
-    # Capa h=1
-    draw_box(start_x + offset, start_y + offset, w_lay, h_lay, c_h1, "Ch 1: h=1.0", "Fundamental", style="square")
-    # Capa h=0.5
-    draw_box(start_x, start_y, w_lay, h_lay, c_h05, "Ch 0: h=0.5", "Sub-Harmonic", style="square")
+    # 1. RAW AUDIO
+    draw_box(4, 22, 4, 1, "Raw Audio Input", "Waveform (16kHz)", c_input)
+    draw_arrow(6, 22, 6, 21.2)
     
-    # Etiqueta Global Input
-    ax.text(start_x + w_lay + 5, start_y + h_lay/2, "Input HCQT Tensor\n(Batch, 3, 88, Time)", 
-            va='center', fontsize=11, fontweight='bold')
+    # 2. CQT PREPROCESSING
+    draw_box(4, 20, 4, 1, "CQT Extraction", "High-Res: 352 Bins\n(B, 1, 352, 512)", c_input)
+    draw_arrow(6, 20, 6, 19.2)
+    
+    # 3. ACOUSTIC MODEL (HIGH RES)
+    draw_box(3, 16.5, 6, 2.5, "Acoustic Model (High-Res)", 
+             "Input Conv (7x7)\n+\nResidual Block (3x3)\n+\nHD-Conv (Armónicos)", c_high)
+    ax.text(9.2, 17.75, "Tensor:\n(B, 24, 352, 512)", fontsize=9, color='blue', ha='left')
+    draw_arrow(6, 16.5, 6, 15.2)
+    
+    # 4. BOTTLENECK (MAXPOOL)
+    draw_box(4, 14, 4, 1, "📉 MaxPool Downsampling", "Kernel=(4,1) | Stride=(4,1)", c_pool)
+    ax.text(8.2, 14.5, "¡Freq / 4!", fontsize=10, fontweight='bold', color='red')
+    draw_arrow(6, 14, 6, 12.7)
+    
+    # 5. ACOUSTIC MODEL (LOW RES / CONTEXT)
+    draw_box(3, 10.5, 6, 2, "Temporal Context", 
+             "3x Dilated Residual Blocks\nDilation Time: [1, 2, 4]", c_low)
+    ax.text(9.2, 11.5, "Tensor:\n(B, 24, 88, 512)", fontsize=9, color='blue', ha='left')
+    draw_arrow(6, 10.5, 6, 9.5)
+    
+    # --- RAMIFICACIÓN A CABEZAS (LSTMs) ---
+    # Línea horizontal distribuidora
+    plt.plot([2, 10], [9.5, 9.5], color='black', lw=1.5)
+    
+    # Cabezas
+    # Onset
+    draw_arrow(2, 9.5, 2, 8.5)
+    draw_box(1, 7, 2, 1.5, "Onset Head", "Bi-LSTM\n(B, 88, 512)", c_head)
+    
+    # Frame
+    draw_arrow(4.66, 9.5, 4.66, 8.5)
+    draw_box(3.66, 7, 2, 1.5, "Frame Head", "Bi-LSTM\n(B, 88, 512)", c_head)
+    
+    # Offset
+    draw_arrow(7.33, 9.5, 7.33, 8.5)
+    draw_box(6.33, 7, 2, 1.5, "Offset Head", "Bi-LSTM\n(B, 88, 512)", c_head)
+    
+    # Velocity
+    draw_arrow(10, 9.5, 10, 8.5)
+    draw_box(9, 7, 2, 1.5, "Velocity Head", "Bi-LSTM\n(B, 88, 512)", c_head)
+    
+    # --- CONEXIONES ENTRE CABEZAS (Dependencies) ---
+    # HPPNet usa Onset para ayudar a Frame, etc.
+    # Dibujamos flechas curvas punteadas para indicar dependencia condicional
+    ax.annotate("", xy=(3.66, 7.75), xytext=(3, 7.75), arrowprops=dict(arrowstyle="->", ls="--", color='gray'))
+    ax.annotate("", xy=(6.33, 7.75), xytext=(5.66, 7.75), arrowprops=dict(arrowstyle="->", ls="--", color='gray'))
+    
+    # 7. POST-PROCESSING
+    # Recogemos todas las flechas en un punto
+    draw_arrow(2, 7, 6, 5.5) # Desde Onset
+    draw_arrow(4.66, 7, 6, 5.5) # Desde Frame
+    draw_arrow(7.33, 7, 6, 5.5) # Desde Offset
+    draw_arrow(10, 7, 6, 5.5) # Desde Vel
+    
+    draw_box(3, 4, 6, 1.5, "Decoding & Thresholding", 
+             "Sigmoid > Thresh\nPeak Picking Algorithm", c_input)
+             
+    draw_arrow(6, 4, 6, 2.5)
+    
+    # 8. OUTPUT
+    draw_box(4.5, 1, 3, 1.5, "OUTPUT", "MIDI File\n(.mid)", c_midi)
 
-    # Punto de salida del input
-    p_input_out = (start_x + w_lay/2, start_y)
-
-    # ==========================================
-    # 2. RAMAS (ONSET vs OTHER)
-    # ==========================================
-    y_start_branches = 82
-    w_col = 30
-    h_col = 48
+    # Título
+    plt.title("Arquitectura: Res-HPPNet High-Res\n(Batch=32, Seg=512 Frames)", fontsize=16, fontweight='bold', pad=20)
     
-    # Fondo Rama Onset (Izquierda)
-    rect_on = patches.FancyBboxPatch((10, 30), w_col, h_col, boxstyle="round,pad=1", fc=c_onset_bg, ec='none', alpha=0.5)
-    ax.add_patch(rect_on)
-    ax.text(25, y_start_branches, "ONSET Branch\n(Shape Expert)", ha='center', fontsize=12, fontweight='bold', color='#1565C0')
-
-    # Fondo Rama Other (Derecha)
-    rect_off = patches.FancyBboxPatch((60, 30), w_col, h_col, boxstyle="round,pad=1", fc=c_other_bg, ec='none', alpha=0.5)
-    ax.add_patch(rect_off)
-    ax.text(75, y_start_branches, "OTHER Branch\n(Duration Expert)", ha='center', fontsize=12, fontweight='bold', color='#E65100')
-
-    # --- Bloques Internos ---
-    block_h = 5
-    gap = 4
-    y_curr = 72
-    
-    for i in range(2): # Resblocks iniciales
-        draw_box(13, y_curr, 24, block_h, c_block, f"Residual Block {i+1}", "Conv-IN-ReLU")
-        draw_box(63, y_curr, 24, block_h, c_block, f"Residual Block {i+1}", "Conv-IN-ReLU")
-        # Flechas intermedias
-        if i == 0:
-            draw_arrow(25, y_curr, 25, y_curr - gap)
-            draw_arrow(75, y_curr, 75, y_curr - gap)
-        y_curr -= (block_h + gap)
-
-    # HDConv (Diferenciada)
-    draw_box(13, y_curr, 24, block_h, c_hdc, "HDConv Layer", "Dilated Harmonics")
-    draw_box(63, y_curr, 24, block_h, c_hdc, "HDConv Layer", "Dilated Harmonics")
-    # Flechas a HDConv
-    draw_arrow(25, y_curr + block_h + gap, 25, y_curr + block_h)
-    draw_arrow(75, y_curr + block_h + gap, 75, y_curr + block_h)
-    
-    y_curr -= (block_h + gap)
-    
-    # Context
-    draw_box(13, y_curr, 24, block_h, c_block, "Context Stack", "3x Residual Blocks")
-    draw_box(63, y_curr, 24, block_h, c_block, "Context Stack", "3x Residual Blocks")
-    # Flechas a Context
-    draw_arrow(25, y_curr + block_h + gap, 25, y_curr + block_h)
-    draw_arrow(75, y_curr + block_h + gap, 75, y_curr + block_h)
-
-    # Conectar Input a Ramas
-    draw_arrow(p_input_out[0], p_input_out[1], 25, 77, color='#555')
-    draw_arrow(p_input_out[0], p_input_out[1], 75, 77, color='#555')
-
-    # ==========================================
-    # 3. FUSIÓN Y DETACH
-    # ==========================================
-    y_fusion = 20
-    
-    # Caja de Concatenación
-    draw_box(40, y_fusion, 20, 5, '#FFF', "Concatenate", "dim=1")
-    
-    # Salidas de las ramas
-    p_onset_end = (25, y_curr)
-    p_other_end = (75, y_curr)
-    
-    # Flecha Onset -> Concat (CON DETACH)
-    ax.annotate("Stop Gradient\n(.detach())", xy=(40, y_fusion+2.5), xytext=(25, y_fusion+12),
-                arrowprops=dict(arrowstyle="->", color='#D32F2F', lw=2, linestyle="--"),
-                ha='center', fontsize=9, color='#D32F2F', fontweight='bold', 
-                bbox=dict(boxstyle="round", fc="white", ec="#D32F2F"))
-    # Línea visual desde Onset
-    draw_arrow(25, y_curr, 25, y_fusion+12) 
-    
-    # Flecha Other -> Concat
-    draw_arrow(75, y_curr, 60, y_fusion+2.5)
-
-    # ==========================================
-    # 4. CABEZAS (LSTMs)
-    # ==========================================
-    y_lstm = 8
-    lstm_w = 18
-    
-    # Onset Head (Directa desde rama Onset)
-    draw_box(5, y_lstm, lstm_w, 6, c_lstm, "Onset Head", "Bi-LSTM (128)")
-    draw_arrow(25, y_curr, 14, y_lstm+6) # Rama Onset -> Head Onset
-    
-    # Otras Heads (Desde Concat)
-    draw_box(29, y_lstm, lstm_w, 6, c_lstm, "Frame Head", "Bi-LSTM (128)")
-    draw_box(53, y_lstm, lstm_w, 6, c_lstm, "Offset Head", "Bi-LSTM (128)")
-    draw_box(77, y_lstm, lstm_w, 6, c_lstm, "Velocity Head", "Bi-LSTM (128)")
-    
-    # Flechas desde Concat
-    draw_arrow(50, y_fusion, 38, y_lstm+6)
-    draw_arrow(50, y_fusion, 62, y_lstm+6)
-    draw_arrow(50, y_fusion, 86, y_lstm+6)
-
-    # Títulos finales
-    ax.text(50, 98, "Residual HCQT-HPPNet Architecture", fontsize=18, fontweight='bold', ha='center')
-    ax.text(50, 1, "Output: MIDI Events (Onset, Frame, Offset, Velocity)", fontsize=12, style='italic', ha='center')
-
     plt.tight_layout()
-    plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"✅ Diagrama PRO guardado: {save_path}")
+    plt.savefig("modelo_arquitectura_final.png", dpi=300, bbox_inches='tight')
     plt.show()
 
 if __name__ == "__main__":
-    draw_professional_architecture()
+    draw_architecture_diagram()

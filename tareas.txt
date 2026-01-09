@@ -210,3 +210,6 @@ degrade la precisión en la detección del ataque."
 "Gracias a las conexiones residuales y la entrada HCQT, el modelo alcanzó un F1 Score de ~0.80 en apenas 3 épocas, 
 demostrando una eficiencia de aprendizaje muy superior a arquitecturas que inician con 'Cold Start' (aprendiendo 
 desde cero sin guía armónica)."
+
+Tu modelo nuevo es tan preciso que aprende a predecir el dedo. Como el dedo se levanta antes que 
+el pedal, el modelo corta el sonido y... ¡zas! Se crea ese hueco de silencio antinatural que te molesta.

@@ -9,29 +9,20 @@ __pycache__/
 amt_piano/
 tareas.txt
 dataset/
-processed_data/
-processed_data_on_grid/
 songs/
-processed_data_HPPNET_100/
-processed_data_HPPNET_100_J_25/
 papers/
 
-processed_data_HPPNET_100.rar
-
-*.rar
 models_kaggles_residual/
 
 *.pyc
 .ipynb_checkpoints/
 *.rar
 *.zip
-*.pth
 *.wav
 *.mp3
 *.mid
 
 # Ignorar audios pesados
-*.mp3
 *.wav
 *.flac
 

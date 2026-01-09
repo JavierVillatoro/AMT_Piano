@@ -13,13 +13,13 @@ def midi_to_name(midi_number):
     return librosa.midi_to_note(midi_number + 21)
 
 def plot_paper_style_grid():
-    base_path = Path("processed_data_on_grid")
+    base_path = Path("processed_data_CQT_48")
     if not base_path.exists():
         print("❌ Ejecuta primero el preprocesamiento.")
         return
 
     # 1. Cargar una canción al azar
-    files = list((base_path / "inputs_cqt").glob("*.npy"))
+    files = list((base_path / "inputs_hcqt").glob("*.npy"))
     if not files:
         print("No hay datos procesados.")
         return
