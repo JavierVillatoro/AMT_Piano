@@ -1,110 +1,143 @@
-# AMT Piano
+# High-Resolution HPPNet for Piano Transcription
 
-This project implements a **custom Automatic Music Transcription (AMT)** system for piano, designed to work with the **MAESTRO dataset**. 
+This repository contains a PyTorch implementation of a High-Resolution Harmonic Pitch Prediction Network (HPPNet) designed for Automatic Music Transcription (AMT). The system converts raw audio recordings of piano performances into symbolic MIDI files, predicting note onsets, offsets, frame activation, and velocity with high precision.
 
-The core neural network is a specialized architecture **based on HPPNet (Harmonic Pitch Prediction Network)** principles. Unlike standard CRNNs, this model utilizes **Harmonic Dilated Convolutions (HDConv)** and **Frequency-Grouped LSTMs** to explicitly capture the harmonic relationships between piano notes, resulting in high-precision polyphonic transcription.
+The model is trained on the **MAESTRO v3.0.0** dataset and utilizes a custom architecture involving Harmonic Dilated Convolutions (HDConv) and Fine-Grained Bi-Directional LSTMs.
 
----
+## Table of Contents
 
-## 🚀 Execution Pipeline
+- [Overview](#overview)
+- [Model Architecture](#model-architecture)
+- [Dataset](#dataset)
+- [Requirements](#requirements)
+- [Usage](#usage)
+    - [Preprocessing](#1-preprocessing)
+    - [Training](#2-training)
+    - [Inference](#3-inference)
+- [Configuration](#configuration)
+- [Metrics and Loss Functions](#metrics-and-loss-functions)
+- [License](#license)
 
-Follow these steps in order to reproduce the training and inference pipeline.
+## Overview
 
-### 1. Data Preparation
+Automatic Music Transcription (AMT) is the process of converting an acoustic musical signal into some form of musical notation. This project focuses on piano transcription, aiming to output MIDI files that accurately capture the timing and dynamics of a performance.
 
-* **Script:** `01_rename_midi.py`
-    * **Purpose:** Normalizes all MIDI file extensions to `.mid`.
-* **Script:** `02_resample_in_place.py`
-    * **Purpose:** Resamples the entire MAESTRO dataset to **16,000 Hz (Mono)**.
-    * *Note:* This overwrites original files to optimize disk space and training speed.
+Key features of this implementation:
+* **High-Resolution Input:** Uses a Constant-Q Transform (CQT) with 48 bins per octave, resulting in an input size of 352 frequency bins.
+* **Multi-Task Learning:** Simultaneously predicts Onsets, Frames (duration), Offsets, and Velocity.
+* **Post-Processing:** Implements a logic-based decoding strategy that utilizes onset peak picking and explicit offset detection to determine note duration.
 
----
+## Model Architecture
 
-### 2. Preprocessing (Ultralight HCQT)
+The architecture is based on HPPNet (Harmonic Pitch Prediction Network) with several modifications for stability and performance:
 
-* **Script:** `03_preprocess.py`
-    * **Method:** **HCQT (Harmonic Constant-Q Transform)**.
-    * **Input Features:** A 3-Channel tensor capturing specific harmonic structures:
-        1.  **0.5x** (Sub-harmonic / Octave below)
-        2.  **1.0x** (Fundamental frequency)
-        3.  **2.0x** (First harmonic / Octave above)
-    * **Storage Optimization:**
-        * Data is saved using **`float16`** (spectrograms) and **`int8`** (binary targets) to drastically reduce disk usage and allow larger batch sizes.
-    * **Safety:** Handles the Nyquist limit automatically to prevent crashes at 16kHz.
+1.  **Acoustic Model:**
+    * **Input:** High-Resolution CQT spectrogram (Time, 352, 1).
+    * **HDConv (Harmonic Dilated Convolutions):** Captures harmonic structures by using dilated convolutions calculated based on the distance between harmonics in the log-frequency domain.
+    * **Residual Blocks:** Uses Instance Normalization and skip connections to facilitate deep training.
+    * **Pooling:** Reduces the frequency dimension from 352 bins to 88 bins (one per piano key) before entering the context layers.
 
----
+2.  **Sequence Modeling:**
+    * **FG-LSTM:** Fine-Grained Bidirectional LSTMs process the features for each head (Onset, Frame, Offset, Velocity) to capture temporal dependencies.
 
-### 3. Training (Custom HPPNet-based Model)
+3.  **Output Heads:**
+    * **Onset:** Detects the start of a note.
+    * **Frame:** Detects the active duration of a note.
+    * **Offset:** Detects the end of a note.
+    * **Velocity:** Regresses the MIDI velocity (dynamics) of the note.
 
-* **Script:** `06_training.py`
-    * **Engine:** PyTorch with **Automatic Mixed Precision (AMP)** for faster training on consumer GPUs (e.g., GTX 1060 Ti).
-    * **Hyperparameter Tuning:** Integrated with **Optuna**. The script runs a preliminary search (`N_TRIALS`) to find the optimal Learning Rate and LSTM hidden size before starting the main training.
-    * **Output Heads (Multi-Task Learning):**
-        1.  **Onset:** Note attack detection.
-        2.  **Frame:** Note duration/sustain detection.
-        3.  **Offset:** Note release detection.
-        4.  **Velocity:** Dynamics regression (MSE Loss masked by active frames).
+## Dataset
 
-    * **Class Balancing:** Applies dynamic `pos_weight` to the Loss functions to handle the imbalance between silence and active notes.
+This model is designed to be trained on the **MAESTRO (MIDI and Audio Edited for Synchronous TRacks and Organization)** dataset, version 3.0.0.
 
----
+* **Source:** Google Magenta MAESTRO Dataset
+* **Format:** The preprocessing script expects the dataset structure to contain `.wav` and `.midi` pairs.
 
-### 4. Inference (Audio → MIDI)
+## Requirements
 
-* **Script:** `07_inferencel.py`
-    * **Purpose:** Generates the final MIDI file from raw audio.
-    * **Process:**
-        1.  Converts audio to the specific **3-Channel HCQT** format used in training.
-        2.  Passes data through the custom network.
-        3.  Decodes `Onset`, `Frame`, and `Offset` probabilities into millisecond-accurate note events.
-        4.  Assigns dynamics using the `Velocity` head.
-    * **Output:** MIDI files are saved in the `midi_output` directory.
+* Python 3.8+
+* PyTorch (CUDA recommended)
+* Librosa
+* PrettyMIDI
+* Numpy
+* Pandas
+* Scikit-learn
+* Mir_eval
+* Tqdm
+* Matplotlib / Seaborn
 
----
+To install the necessary dependencies, you can use pip:
 
-## 🧠 Custom Model Architecture
+    pip install torch numpy librosa pretty_midi pandas scikit-learn mir_eval tqdm matplotlib seaborn
 
-This architecture is designed to understand audio physics rather than treating spectrograms as simple images.
+## Usage
 
-| Component | Type | Description |
+### 1. Preprocessing
+
+The preprocessing pipeline converts raw audio into CQT spectrograms and generates ground-truth labels for training.
+
+    python preprocess.py
+
+**Output:**
+The script generates `.npy` files in the `processed_data_HighRes` directory, organized into:
+* `inputs_hcqt`: Input spectrograms.
+* `targets_onset`: Note start targets.
+* `targets_offset`: Note end targets.
+* `targets_frame`: Active note duration targets.
+* `targets_velocity`: Normalized velocity values.
+
+### 2. Training
+
+The training script supports multi-GPU DataParallel training and mixed-precision (AMP). It utilizes a curriculum learning approach where loss weights may be adjusted.
+
+    python train.py
+
+**Key Training Features:**
+* **Loss Weights:** Dynamically balances Onset, Frame, and Offset importance.
+* **Curriculum:** The provided configuration emphasizes Frame and Offset accuracy in later stages.
+* **Validation:** Periodically evaluates the model using `mir_eval` metrics.
+
+### 3. Inference
+
+To transcribe an audio file to MIDI using a trained checkpoint:
+
+    python inference.py
+
+The script will prompt for the model checkpoint path and the input audio file path. It outputs a standard `.mid` file.
+
+**Decoding Logic:**
+1.  **Peak Picking:** Identifies local maxima in the Onset probability map.
+2.  **Sustain Verification:** Checks the Frame probability to confirm the note is active.
+3.  **Offset Detection:** Searches for a high Offset probability or a drop in Frame probability to terminate the note.
+
+## Configuration
+
+The default hyperparameters are set for a standard GPU environment (e.g., T4 or P100):
+
+| Parameter | Value | Description |
 | :--- | :--- | :--- |
-| **Input** | `(Batch, 3, Time, 88)` | 3-Channel HCQT Spectrogram (Sub-harmonic, Fundamental, 1st Harmonic). |
-| **Stem** | Conv2d Blocks | Initial feature extraction with Instance Normalization. |
-| **Harmonic Block** | **HDConv** | **Harmonic Dilated Convolution**. Filters are dilated based on musical intervals (12 bins/octave) to capture dependencies between a note and its harmonics. |
-| **Context Block** | **DilatedFreqBlock** | Convolutions dilated along the *frequency axis* to understand the context of the entire piano range. |
-| **Output Heads** | **FG-LSTM** | **Frequency-Grouped BiLSTMs**. Instead of one global LSTM, it processes frequency bands to maintain pitch invariance. |
+| **Sample Rate** | 16000 Hz | Audio sampling rate |
+| **Hop Length** | 320 | ~20ms temporal resolution |
+| **Bins/Octave** | 48 | High spectral resolution |
+| **Input Bins** | 352 | Total frequency bins |
+| **Batch Size** | 16 | Adjusted for GPU memory |
+| **Learning Rate** | 1e-4 | For fine-tuning/Phase 2 |
 
----
+## Metrics and Loss Functions
 
-## 🛠 Common Issues & Fixes
+The model performance is evaluated using the following metrics:
 
-### 1. Nyquist Error during Preprocessing
-* **Symptom:** Error when computing harmonics for high notes (> 8 kHz).
-* **Solution:** The `03_preprocess...` script automatically fills frequencies above the Nyquist limit with zeros instead of crashing.
+* **Loss Functions:**
+    * **Focal Loss:** Used for Onset and Offset detection to handle class imbalance (sparse events vs. silence).
+    * **Combo Loss (BCE + Dice):** Used for Frame detection to ensure both pixel-wise accuracy and global shape consistency.
+    * **MSE Loss:** Used for Velocity regression.
+* **Evaluation:**
+    * **Precision, Recall, F1-Score:** Calculated using `mir_eval.transcription` with standard tolerances (50ms for onsets).
+    * **Note Offset Accuracy:** Evaluates if both the start and end of the note are correct (within 20% of duration).
 
-### 2. CUDA Out of Memory
-* **Cause:** The 3-channel input increases VRAM usage.
-* **Solution:** The training script uses `SEGMENT_FRAMES = 640` (approx 10s) and `gradient_accumulation` to keep the physical batch size small (e.g., 4) while simulating a larger batch.
+## License
 
-### 3. OSError with MP3 files (Windows)
-* **Symptom:** File paths contain `&` or quotes when dragged into the terminal.
-* **Solution:** The scripts include a path cleaner to sanitize Windows inputs automatically.
-
----
-
-## 📦 Requirements
-
-Install the necessary dependencies. **Optuna** is now required for the training loop.
-
-```bash
-# 1. PyTorch (with CUDA 11.8 support recommended)
-pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu118](https://download.pytorch.org/whl/cu118)
-
-# 2. Audio & Data Processing
-pip install numpy librosa pretty_midi soundfile tqdm scikit-learn matplotlib
-
-# 3. Optimization
-pip install optuna
+This project is licensed under the MIT License.
 
 
 
