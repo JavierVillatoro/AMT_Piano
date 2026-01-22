@@ -1,8 +1,7 @@
 # High-Resolution HPPNet for Piano Transcription
 
-| Art Tatum - Yesterdays | Audio-to-MIDI Transcription |
-| :---: |
-| [![Audio-to-MIDI Transcription](https://img.youtube.com/vi/XfllimPHkqw/maxresdefault.jpg)](https://www.youtube.com/watch?v=XfllimPHkqw) |
+
+[![Audio-to-MIDI Transcription](https://img.youtube.com/vi/XfllimPHkqw/maxresdefault.jpg)](https://www.youtube.com/watch?v=XfllimPHkqw)
 
 This repository contains a PyTorch implementation of a High-Resolution Harmonic Pitch Prediction Network (HPPNet) designed for Automatic Music Transcription (AMT). The system converts raw audio recordings of piano performances into symbolic MIDI files, predicting note onsets, offsets, frame activation, and velocity with high precision.
 
