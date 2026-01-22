@@ -33,15 +33,15 @@ BINS_PER_OCTAVE = 48
 INPUT_BINS = 352
 # Nota: En Kaggle working directory es donde descomprimimos
 DATA_PATH = Path("/kaggle/input/maestrocqt48/processed_data_CQT_48")
-CHECKPOINT_PATH = Path("/kaggle/input/latest_checkpoint_07041_note_off.pth")
+CHECKPOINT_PATH = Path("/kaggle/input/latest/latest_checkpoint_07041_note_off.pth")
  
 
 # Hyperparámetros Optimizados para Kaggle
 BATCH_SIZE = 16           # Subido de 4 a 32 para aprovechar GPU P100/T4 , CAMBIAR SI DA OOM 
 FINAL_EPOCHS = 50         
 LEARNING_RATE = 0.0001   
-PATIENCE_LR = 1           # Un poco más de paciencia
-FACTOR_LR = 0.6           
+PATIENCE_LR = 0           #  Antes a uno , quiero que seas impaciente picha que hay prisa
+FACTOR_LR = 0.5           
 NUM_WORKERS = 4           # Kaggle tiene buena CPU I/O
 
 # Umbrales
@@ -698,6 +698,7 @@ if __name__ == "__main__":
     log_file.flush()
     
     best_f1 = 0.0
+    best_frame_f1 = 0.0
 
     try:
         for epoch in range(FINAL_EPOCHS):

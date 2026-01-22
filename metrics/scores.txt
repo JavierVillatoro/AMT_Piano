@@ -700,6 +700,32 @@ v_loss += ((1.0 * l_on) + (5.0 * l_fr) + (5.0 * l_off) + l_vel).item()
 ----- CAMBIAR GUARDADO --------
 frame_f1 para el scheduler
 
+------RESUME 2 -------
+--------------------------------------------------------------------------------
+🏁 Epoch 3 Results:
+   📉 Loss    : Train=1.1642 | Val=1.2095
+   🎹 Onset   : F1=0.9572 | P=0.9744 | R=0.9406
+   🖼️ Frame   : F1=0.8184 | P=0.7873 | R=0.8520
+   🏁 Offset  : F1=0.3861 | P=0.3628 | R=0.4127
+   ⏱️ Note Offset : F1=0.7134 | P=0.7262 | R=0.7010
+   🚀 Note Off+Vel: F1=0.6828 | P=0.6951 | R=0.6710
+   ⚡ Vel     : MSE=0.0030
+   🧠 LR      : 1.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord de FRAME! Modelo guardado (Frame F1: 0.8184)
+--------------------------------------------------------------------------------
+🏁 Epoch 6 Results:
+   📉 Loss    : Train=1.1542 | Val=1.2061
+   🎹 Onset   : F1=0.9573 | P=0.9723 | R=0.9428
+   🖼️ Frame   : F1=0.8192 | P=0.7898 | R=0.8508
+   🏁 Offset  : F1=0.3867 | P=0.3656 | R=0.4105
+   ⏱️ Note Offset : F1=0.7169 | P=0.7282 | R=0.7060
+   🚀 Note Off+Vel: F1=0.6862 | P=0.6969 | R=0.6758
+   ⚡ Vel     : MSE=0.0030
+   🧠 LR      : 1.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord de FRAME! Modelo guardado (Frame F1: 0.8192)
+
 
 Ablation study formal 
 Variante	Frame F1	Note F1	Note+Off	Note+Vel
@@ -780,6 +806,55 @@ def tensor_to_notes(onset_pred, frame_pred, offset_pred, velocity_pred=None, t_o
 
 
 ------ Lo ultimo lo empeoró , buscar otras opciones -----
+
+
+A. El "Problema del Pedal" (Sustain)
+Este es el fallo nº 1 en AMT de piano.
+
+La realidad: En el piano, cuando pisas el pedal de sustain, la nota sigue sonando aunque levantes el dedo.
+
+El conflicto: ¿Tus etiquetas (ground truth) son "lo que hace el dedo" o "lo que suena"? 
+El dataset Maestro tiene etiquetas MIDI muy precisas de la tecla (dedo). Pero el audio tiene la resonancia del pedal.
+
+El error: Si tu modelo escucha el audio, intentará predecir que la nota sigue sonando (porque la oye),
+ pero la etiqueta le dice "cero" (porque el dedo se levantó). Eso penaliza tu Frame F1 brutalmente.
+
+Solución: Los modelos SOTA suelen tener una entrada o rama específica para detectar el pedal, 
+o usan un umbral de decisión dinámico. Revisa si estás entrenando con la longitud de nota "visual" 
+(piano roll extendido por pedal) o estricta.
+
+
+
+
+
+------LO QUE FALLA------
+end_frame_float = (note.end / time_per_frame) + 1.0 mejorar esto , muy bruto para el frame 
+
+------AÑADIR LOGICA DE CUANDO ACABA EL PEDAL-----
+def get_pedal_intervals(pm):
+    """Devuelve una lista de intervalos [start, end] donde el pedal está pisado (>64)"""
+    pedal_intervals = []
+    current_start = None
+    
+    # El CC 64 es el sustain (Damper Pedal)
+    for control in pm.instruments[0].control_changes:
+        if control.number == 64:
+            if control.value >= 64 and current_start is None:
+                current_start = control.time
+            elif control.value < 64 and current_start is not None:
+                pedal_intervals.append((current_start, control.time))
+                current_start = None
+                
+    # Si termina la canción y el pedal sigue pisado
+    if current_start is not None:
+        pedal_intervals.append((current_start, pm.get_end_time()))
+    return pedal_intervals
+
+def is_pedal_active(time, pedal_intervals):
+    for start, end in pedal_intervals:
+        if start <= time <= end:
+            return True, end
+    return False, 0
 
 
 

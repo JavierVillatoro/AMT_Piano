@@ -267,7 +267,7 @@ def matrix_to_midi(onset_probs, frame_probs, offset_probs, velocity_values, outp
 def main():
     print("\n🎹 --- INFERENCIA HPPNET HIGH-RES (352 Bins) --- 🎹")
     
-    output_dir = Path("midi_output_CQT_48")
+    output_dir = Path("midi_output_CQT_48_resume")
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Buscar modelos

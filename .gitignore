@@ -30,3 +30,5 @@ models_kaggles_residual/
 mis_midis_generados/
 midi_output_hppnet/
 midi_output_residual_kaggle/
+
+alive.js
