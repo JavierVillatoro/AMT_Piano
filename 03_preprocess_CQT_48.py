@@ -191,7 +191,7 @@ def save_verification_plot(audio, hcqt, onsets, offsets, frames, velocities, fil
 
 def procesar_dataset():
     root_path = Path("data/maestro-v3.0.0") 
-    output_base = Path("processed_data_HighRes") 
+    output_base = Path("processed_data_Pedal_1") 
     
     folders = ["inputs_hcqt", "targets_onset", "targets_offset", "targets_frame", "targets_velocity"]
     for sub in folders:

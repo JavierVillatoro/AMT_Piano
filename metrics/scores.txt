@@ -858,4 +858,7 @@ def is_pedal_active(time, pedal_intervals):
 
 
 
+------TRAINING PEDAL -------
+-----20%------
+
 
