@@ -6,14 +6,14 @@ import random
 
 # --- CONFIGURACIÓN ---
 SR = 16000
-HOP_LENGTH = 512
+HOP_LENGTH = 320
 FRAME_TIME = HOP_LENGTH / SR  # 0.032s
 
 def midi_to_name(midi_number):
     return librosa.midi_to_note(midi_number + 21)
 
 def plot_paper_style_grid():
-    base_path = Path("processed_data_CQT_48")
+    base_path = Path("processed_data_cqt_pedal")
     if not base_path.exists():
         print("❌ Ejecuta primero el preprocesamiento.")
         return

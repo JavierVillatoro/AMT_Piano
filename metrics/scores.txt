@@ -861,4 +861,27 @@ def is_pedal_active(time, pedal_intervals):
 ------TRAINING PEDAL -------
 -----20%------
 
+(Multi-Task Learning): Cada vez que añades una nueva cabeza de predicción a tu arquitectura, 
+la suma total de tu pérdida crece, y por tanto, 
+DEBES reducir el Learning Rate proporcionalmente para mantener la estabilidad.
+
+¿Por qué multiplicamos por 5 el Frame y el Offset? Esto es una técnica llamada Task Balancing (Balanceo de Tareas). 
+Detectar un inicio es relativamente fácil para la red (es un pico de energía), 
+pero mantener la predicción encendida durante mucho tiempo (Frame) y saber exactamente cuándo cortarla (Offset) 
+es mucho más difícil. Multiplicando su error por 5, 
+forzamos a la red a que le preste mucha más atención a no equivocarse en esas partes.
+
+¿Qué pasa después en la inferencia con find_peaks?
+Aquí viene el truco final. Tu red neuronal ha aprendido a predecir esos picos suaves (0.65 y 0.35).
+Sin embargo, la función de Python que usamos ahora mismo en tu código (find_peaks de SciPy) es "tonta". Simplemente busca el número más alto. Al ver el 0.65, dirá: "¡Ah! El pico está en la primera ventana".
+
+Es decir, por ahora tu salida MIDI sí está cuantizada a bloques de 20ms, porque aunque la red neuronal tiene la información de alta resolución, la estamos redondeando al final.
+
+(Pequeño spoiler: Si recuerdas, para el pedal implementamos 
+el Algoritmo 2 Sub-frame que leía la diferencia entre el punto A, B y C para recuperar el milisegundo exacto. 
+Más adelante, cuando tu modelo esté 100% entrenado, podremos aplicar esa misma matemática 
+a los onsets de las notas para des-cuantizarlos y recuperar el ritmo hiper-preciso del pianista original).
+
+problema hotframe
+
 
