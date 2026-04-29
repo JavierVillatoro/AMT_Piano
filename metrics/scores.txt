@@ -884,4 +884,6 @@ a los onsets de las notas para des-cuantizarlos y recuperar el ritmo hiper-preci
 
 problema hotframe
 
-
+-------voy a pasar al plan de accion de separar train val test------ nos aseguramos data leakage
+----muestreo estratificado para preprocess nuevo----
+--- corregir error en umbrales de pedal , antes usaba los de antes , ahora nuevas variables , y >0.5

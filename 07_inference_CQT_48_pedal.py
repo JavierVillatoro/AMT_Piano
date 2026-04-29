@@ -328,7 +328,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Buscar modelos (Añadido tu nuevo nombre como primera opción)
-    possible_models = ["best_hppnet_phase3_pedal.pth", "best_hppnet_kaggle.pth", "latest_checkpoint.pth"]
+    possible_models = ["best_hppnet_phase3_pedal_2.pth", "best_hppnet_kaggle.pth", "latest_checkpoint.pth"]
     model_path = None
     for pm in possible_models:
         if os.path.exists(pm):
