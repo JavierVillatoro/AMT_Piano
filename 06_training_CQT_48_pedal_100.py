@@ -1,3 +1,4 @@
+#!pip install mir_eval
 import os
 import random
 import math
@@ -9,7 +10,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import mir_eval 
-from sklearn.metrics import f1_score, precision_score, recall_score, mean_squared_error
+from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
@@ -31,8 +32,7 @@ SEGMENT_FRAMES = 512
 BINS_PER_OCTAVE = 48  
 INPUT_BINS = 352
 
-# ⚠️ CAMBIA ESTO POR TU RUTA DE KAGGLE DONDE ESTÉN LAS CARPETAS TRAIN/VALIDATION/TEST
-DATA_PATH = Path("/kaggle/input/datasets/javiervillatoro/maestro-100/processed_data_cqt_pedal_100")
+DATA_PATH = Path("/kaggle/input/datasets/javivillatoro/amt-maestro-split-full/processed_data_cqt_pedal_100")
 CHECKPOINT_PATH = Path("/kaggle/working/latest_checkpoint.pth") 
 
 BATCH_SIZE = 16           
@@ -61,11 +61,11 @@ def set_seed(seed):
 set_seed(SEED)
 
 # ==========================================
-# 1. DATASET (MODIFICADO PARA ESTRUCTURA CSV)
+# 1. DATASET (MODIFICADO ANTI-FUGAS DE MEMORIA)
 # ==========================================
 class PianoDataset(Dataset):
     def __init__(self, processed_dir, split='train'):
-        self.processed_dir = Path(processed_dir) / split  # 👈 AHORA ENTRA EN LA CARPETA DEL SPLIT DIRECTAMENTE
+        self.processed_dir = Path(processed_dir) / split 
         p = self.processed_dir / "inputs_hcqt"
         if not p.exists(): raise RuntimeError(f"❌ Ruta no existe: {p}")
         
@@ -96,19 +96,29 @@ class PianoDataset(Dataset):
         fid = self.files[file_idx].name
         try:
             base = self.processed_dir
-            hcqt = np.load(base / "inputs_hcqt" / fid, mmap_mode='r')[start:end] 
             
+            # 🛡️ FUNCIÓN INTERNA PARA CARGAR Y DESTRUIR MMAP
+            def load_slice(folder):
+                path = base / folder / fid
+                m = np.load(path, mmap_mode='r')
+                chunk = np.array(m[start:end]) # Copia a RAM
+                if hasattr(m, '_mmap'):
+                    m._mmap.close() # Cierra el archivo del OS
+                del m # Destruye el objeto
+                return chunk
+
+            hcqt = load_slice("inputs_hcqt")
             if hcqt.shape[1] != INPUT_BINS:
                 raise ValueError(f"Bad shape in {fid}: {hcqt.shape}")
             
-            onset = np.load(base / "targets_onset" / fid, mmap_mode='r')[start:end]
-            frame = np.load(base / "targets_frame" / fid, mmap_mode='r')[start:end]
-            offset = np.load(base / "targets_offset" / fid, mmap_mode='r')[start:end]
-            vel = np.load(base / "targets_velocity" / fid, mmap_mode='r')[start:end]
+            onset = load_slice("targets_onset")
+            frame = load_slice("targets_frame")
+            offset = load_slice("targets_offset")
+            vel = load_slice("targets_velocity")
             
-            ped_onset = np.load(base / "targets_pedal_onset" / fid, mmap_mode='r')[start:end]
-            ped_offset = np.load(base / "targets_pedal_offset" / fid, mmap_mode='r')[start:end]
-            ped_frame = np.load(base / "targets_pedal_frame" / fid, mmap_mode='r')[start:end]
+            ped_onset = load_slice("targets_pedal_onset")
+            ped_offset = load_slice("targets_pedal_offset")
+            ped_frame = load_slice("targets_pedal_frame")
             
             curr_len = hcqt.shape[0]
             if curr_len < SEGMENT_FRAMES:
@@ -156,7 +166,6 @@ class FocalLoss(nn.Module):
     def forward(self, inputs, targets):
         inputs = inputs.float()
         targets = targets.float()
-        
         p = torch.sigmoid(inputs)
         ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
         p_t = p * targets + (1 - p) * (1 - targets)
@@ -174,7 +183,6 @@ class DiceLoss(nn.Module):
     def forward(self, inputs, targets):
         inputs = torch.sigmoid(inputs).float().view(-1)
         targets = targets.float().view(-1)
-        
         intersection = (inputs * targets).sum()
         dice = (2. * intersection + self.smooth) / (inputs.sum() + targets.sum() + self.smooth)
         return 1 - dice
@@ -227,11 +235,9 @@ class HDConv(nn.Module):
         for h in harmonics:
             d_math = int(np.round(BINS_PER_OCTAVE * np.log2(h)))
             if d_math == 0:
-                dil_pt = (1, 1)
-                pad_pt = (1, 1)
+                dil_pt, pad_pt = (1, 1), (1, 1)
             else:
-                dil_pt = (d_math, 1)
-                pad_pt = (d_math, 1)
+                dil_pt, pad_pt = (d_math, 1), (d_math, 1)
             self.convs.append(nn.Conv2d(
                 in_channels, out_channels, 
                 kernel_size=(3, 3), 
@@ -260,9 +266,7 @@ class AcousticModel(nn.Module):
         self.hdc = HDConv(base_channels, base_channels)
         self.hdc_bn = nn.InstanceNorm2d(base_channels, affine=True)
         self.hdc_relu = nn.ReLU()
-        
         self.pool = nn.MaxPool2d(kernel_size=(4, 1), stride=(4, 1))
-        
         self.context = nn.Sequential(
             ResidualBlock(base_channels, base_channels, dilation=(1, 1)),
             ResidualBlock(base_channels, base_channels, dilation=(1, 2)),
@@ -324,14 +328,12 @@ class HPPNet(nn.Module):
         self.acoustic_other = AcousticModel(in_channels, base_channels)
         
         self.head_onset = FG_LSTM(base_channels, lstm_hidden)
-        
         concat_dim = base_channels * 2
         self.head_frame = FG_LSTM(concat_dim, lstm_hidden)
         self.head_offset = FG_LSTM(concat_dim + 1, lstm_hidden) 
         self.head_velocity = FG_LSTM(concat_dim, lstm_hidden)
 
         self.pedal_acoustic = PedalAcousticModel(in_channels, base_channels)
-        
         self.pedal_head_onset = FG_LSTM(base_channels, lstm_hidden // 2)
         self.pedal_head_frame = FG_LSTM(base_channels, lstm_hidden // 2)
         self.pedal_head_offset = FG_LSTM(base_channels, lstm_hidden // 2)
@@ -400,10 +402,8 @@ def compute_metrics_standard(ref_notes_batch, est_notes_batch):
         ref_arr = np.array(ref_notes)
         est_arr = np.array(est_notes)
         if len(ref_arr) == 0 and len(est_arr) == 0: continue
-        if len(ref_arr) == 0:
-            total_fp += len(est_arr); continue
-        if len(est_arr) == 0:
-            total_fn += len(ref_arr); continue
+        if len(ref_arr) == 0: total_fp += len(est_arr); continue
+        if len(est_arr) == 0: total_fn += len(ref_arr); continue
 
         ref_int, ref_p = ref_arr[:, :2], ref_arr[:, 2]
         est_int, est_p = est_arr[:, :2], est_arr[:, 2]
@@ -427,10 +427,8 @@ def compute_note_offset_metrics(ref_notes_batch, est_notes_batch):
         ref_arr = np.array(ref_notes)
         est_arr = np.array(est_notes)
         if len(ref_arr) == 0 and len(est_arr) == 0: continue
-        if len(ref_arr) == 0:
-            total_fp += len(est_arr); continue
-        if len(est_arr) == 0:
-            total_fn += len(ref_arr); continue
+        if len(ref_arr) == 0: total_fp += len(est_arr); continue
+        if len(est_arr) == 0: total_fn += len(ref_arr); continue
 
         ref_int, ref_p = ref_arr[:, :2], ref_arr[:, 2]
         est_int, est_p = est_arr[:, :2], est_arr[:, 2]
@@ -455,10 +453,8 @@ def compute_note_offset_velocity_metrics(ref_notes_batch, est_notes_batch, veloc
         ref_arr = np.asarray(ref_notes)
         est_arr = np.asarray(est_notes)
         if len(ref_arr) == 0 and len(est_arr) == 0: continue
-        if len(ref_arr) == 0:
-            total_fp += len(est_arr); continue
-        if len(est_arr) == 0:
-            total_fn += len(ref_arr); continue
+        if len(ref_arr) == 0: total_fp += len(est_arr); continue
+        if len(est_arr) == 0: total_fn += len(ref_arr); continue
 
         ref_intervals, ref_pitches, ref_velocities = ref_arr[:, :2], ref_arr[:, 2], ref_arr[:, 3]
         est_intervals, est_pitches, est_velocities = est_arr[:, :2], est_arr[:, 2], est_arr[:, 3]
@@ -479,17 +475,8 @@ def compute_note_offset_velocity_metrics(ref_notes_batch, est_notes_batch, veloc
     f1 = 2 * p * r / (p + r + 1e-8)
     return f1, p, r
 
-def get_pixel_metrics(preds_list, targs_list):
-    p = np.concatenate(preds_list)
-    t = np.concatenate(targs_list)
-    f1 = f1_score(t, p, zero_division=0)
-    prec = precision_score(t, p, zero_division=0)
-    rec = recall_score(t, p, zero_division=0)
-    return f1, prec, rec
-
 def plot_training_history(csv_path="training_log_kaggle.csv"):
     if not os.path.exists(csv_path): return
-        
     try:
         df = pd.read_csv(csv_path)
         if len(df) < 1: return
@@ -536,13 +523,13 @@ def plot_training_history(csv_path="training_log_kaggle.csv"):
         print(f"⚠️ Error generando gráficas: {e}")
 
 # ==========================================
-# 4. MAIN (ENTRENAMIENTO COMPLETO)
+# 4. MAIN (ENTRENAMIENTO COMPLETO STREAMING)
 # ==========================================
 if __name__ == "__main__":
     print(f"\n🚀 HPPNET-SP KAGGLE Training + PEDAL ({DEVICE})")
     
     train_ds = PianoDataset(DATA_PATH, split='train')
-    val_ds = PianoDataset(DATA_PATH, split='validation') # 👈 CAMBIADO A 'validation' SEGÚN EL CSV
+    val_ds = PianoDataset(DATA_PATH, split='validation') 
     
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, pin_memory=True)
     val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
@@ -588,11 +575,9 @@ if __name__ == "__main__":
                     
                     optimizer.zero_grad()
                     
-                    # 1. PASO FORWARD EN FP16
                     with torch.amp.autocast('cuda'):
                         p_on, p_fr, p_off, p_vel, ped_on, ped_fr, ped_off = model(hcqt)
 
-                    # 2. CONVERSIÓN A FP32 PURO
                     p_on = p_on.float()
                     p_fr = p_fr.float()
                     p_off = p_off.float()
@@ -601,7 +586,6 @@ if __name__ == "__main__":
                     ped_fr = ped_fr.float()
                     ped_off = ped_off.float()
                     
-                    # 3. CÁLCULO DE PÉRDIDAS
                     l_on = crit_onset(p_on, targets['onset'])
                     l_fr = crit_frame(p_fr, targets['frame'])
                     l_off = crit_offset(p_off, targets['offset'])
@@ -614,7 +598,6 @@ if __name__ == "__main__":
                     
                     loss = (1.0 * l_on) + (5.0 * l_fr) + (5.0 * l_off) + l_vel + (1.0 * l_ped_on) + (5.0 * l_ped_fr) + (5.0 * l_ped_off)
                         
-                    # 4. BACKPROPAGATION
                     scaler.scale(loss).backward()
                     scaler.unscale_(optimizer)
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -630,29 +613,51 @@ if __name__ == "__main__":
                 model.eval()
                 v_loss = 0
                 
+                # Colecciones Notas (Solo guardamos los eventos crudos para mir_eval)
                 ref_all, est_all = [], []
-                fr_preds, fr_targs, off_preds, off_targs = [], [], [], []
                 vel_accum, vel_count = 0, 0
                 
-                ped_on_preds, ped_on_targs = [], [] 
-                ped_fr_preds, ped_fr_targs = [], [] 
-                ped_off_preds, ped_off_targs = [], [] 
-                
+                # 🛡️ CONTADORES INCREMENTALES DE MEMORIA CERO [TP, FP, FN]
+                metric_fr = np.zeros(3)
+                metric_off = np.zeros(3)
+                metric_ped_on = np.zeros(3)
+                metric_ped_fr = np.zeros(3)
+                metric_ped_off = np.zeros(3)
+
+                def update_metrics(preds, targs, metric_array):
+                    p = preds.bool()
+                    t = targs.bool()
+                    metric_array[0] += (p & t).sum().item()
+                    metric_array[1] += (p & ~t).sum().item()
+                    metric_array[2] += (~p & t).sum().item()
+
                 with torch.no_grad():
                     for batch in val_loader:
                         hcqt = batch['hcqt'].to(DEVICE)
                         targets = {k: v.to(DEVICE) for k, v in batch.items() if k != 'hcqt'}
                         p_on, p_fr, p_off, p_vel, ped_on, ped_fr, ped_off = model(hcqt)
                         
-                        v_loss += loss.item() 
+                        l_on = crit_onset(p_on, targets['onset'])
+                        l_fr = crit_frame(p_fr, targets['frame'])
+                        l_off = crit_offset(p_off, targets['offset'])
+                        mask = targets['frame'].float()
+                        l_vel = (crit_vel(torch.sigmoid(p_vel), targets['velocity'].float()) * mask).sum() / (mask.sum() + 1e-4)
+                        l_ped_on = crit_onset(ped_on, targets['pedal_onset'])
+                        l_ped_fr = crit_frame(ped_fr, targets['pedal_frame'])
+                        l_ped_off = crit_offset(ped_off, targets['pedal_offset'])
+                        
+                        val_batch_loss = (1.0 * l_on) + (5.0 * l_fr) + (5.0 * l_off) + l_vel + (1.0 * l_ped_on) + (5.0 * l_ped_fr) + (5.0 * l_ped_off)
+                        v_loss += val_batch_loss.item() 
                         
                         pr_on, pr_fr, pr_off, pr_vel = torch.sigmoid(p_on), torch.sigmoid(p_fr), torch.sigmoid(p_off), torch.sigmoid(p_vel)
                         pr_ped_on, pr_ped_fr, pr_ped_off = torch.sigmoid(ped_on), torch.sigmoid(ped_fr), torch.sigmoid(ped_off)
                         
-                        fr_preds.append((pr_fr > THRESHOLD_FRAME).cpu().numpy().flatten())
-                        fr_targs.append((targets['frame'] > 0.5).cpu().numpy().flatten())
-                        off_preds.append((pr_off > THRESHOLD_OFFSET).cpu().numpy().flatten())
-                        off_targs.append((targets['offset'] > 0.5).cpu().numpy().flatten())
+                        # 🛡️ ACTUALIZACIÓN DE MÉTRICAS EN TIEMPO REAL
+                        update_metrics(pr_fr > THRESHOLD_FRAME, targets['frame'] > 0.5, metric_fr)
+                        update_metrics(pr_off > THRESHOLD_OFFSET, targets['offset'] > 0.5, metric_off)
+                        update_metrics(pr_ped_on > TH_PED_ON, targets['pedal_onset'] > 0.5, metric_ped_on)
+                        update_metrics(pr_ped_fr > TH_PED_FR, targets['pedal_frame'] > 0.5, metric_ped_fr)
+                        update_metrics(pr_ped_off > TH_PED_OFF, targets['pedal_offset'] > 0.5, metric_ped_off)
                         
                         v_p = pr_vel.cpu().numpy().flatten()
                         v_t = targets['velocity'].cpu().numpy().flatten()
@@ -660,15 +665,6 @@ if __name__ == "__main__":
                         if m.sum() > 0:
                             vel_accum += mean_squared_error(v_t[m], v_p[m]) * m.sum()
                             vel_count += m.sum()
-
-                        ped_on_preds.append((pr_ped_on > TH_PED_ON).cpu().numpy().flatten())
-                        ped_on_targs.append((targets['pedal_onset'] > 0.5).cpu().numpy().flatten())
-                        
-                        ped_fr_preds.append((pr_ped_fr > TH_PED_FR).cpu().numpy().flatten())
-                        ped_fr_targs.append((targets['pedal_frame'] > 0.5).cpu().numpy().flatten())
-                        
-                        ped_off_preds.append((pr_ped_off > TH_PED_OFF).cpu().numpy().flatten())
-                        ped_off_targs.append((targets['pedal_offset'] > 0.5).cpu().numpy().flatten())
 
                         for i in range(len(hcqt)):
                             v_map = pr_vel[i].cpu().numpy()
@@ -695,14 +691,20 @@ if __name__ == "__main__":
                 onset_f1, onset_p, onset_r = compute_metrics_standard(ref_all, est_all)
                 note_off_f1, note_off_p, note_off_r = compute_note_offset_metrics(ref_all, est_all)
                 note_off_vel_f1, note_off_vel_p, note_off_vel_r = compute_note_offset_velocity_metrics(ref_all, est_all, velocity_tolerance=0.1)
-                
-                frame_f1, frame_p, frame_r = get_pixel_metrics(fr_preds, fr_targs)
-                offset_f1, offset_p, offset_r = get_pixel_metrics(off_preds, off_targs)
                 vel_mse = vel_accum / (vel_count + 1e-8)
 
-                pedal_on_f1, pedal_on_p, pedal_on_r = get_pixel_metrics(ped_on_preds, ped_on_targs)
-                pedal_fr_f1, pedal_fr_p, pedal_fr_r = get_pixel_metrics(ped_fr_preds, ped_fr_targs)
-                pedal_off_f1, pedal_off_p, pedal_off_r = get_pixel_metrics(ped_off_preds, ped_off_targs)
+                def calc_f1(metric_array):
+                    tp, fp, fn = metric_array
+                    p = tp / (tp + fp + 1e-8)
+                    r = tp / (tp + fn + 1e-8)
+                    f1 = 2 * p * r / (p + r + 1e-8)
+                    return f1, p, r
+
+                frame_f1, frame_p, frame_r = calc_f1(metric_fr)
+                offset_f1, offset_p, offset_r = calc_f1(metric_off)
+                pedal_on_f1, pedal_on_p, pedal_on_r = calc_f1(metric_ped_on)
+                pedal_fr_f1, pedal_fr_p, pedal_fr_r = calc_f1(metric_ped_fr)
+                pedal_off_f1, pedal_off_p, pedal_off_r = calc_f1(metric_ped_off)
 
                 curr_lr = optimizer.param_groups[0]['lr']
 
