@@ -324,11 +324,11 @@ def matrix_to_midi(onset_probs, frame_probs, offset_probs, velocity_values,
 def main():
     print("\n🎹 --- INFERENCIA HPPNET HIGH-RES + PEDAL --- 🎹")
     
-    output_dir = Path("midi_output")
+    output_dir = Path("midi_output_split_100")
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Buscar modelos (Añadido tu nuevo nombre como primera opción)
-    possible_models = ["best_hppnet_phase3_pedal_2.pth", "best_hppnet_kaggle.pth", "latest_checkpoint.pth"]
+    possible_models = [""]
     model_path = None
     for pm in possible_models:
         if os.path.exists(pm):

@@ -1,5 +1,7 @@
+# Antifugas 2 
 #!pip install mir_eval
 import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import random
 import math
 import numpy as np
@@ -18,6 +20,7 @@ from tqdm import tqdm
 import pandas as pd
 import sys
 from scipy.signal import find_peaks
+import gc
 
 # ==========================================
 # 0. CONFIGURACIÓN Y ESTÁNDARES
@@ -40,7 +43,7 @@ FINAL_EPOCHS = 50
 LEARNING_RATE = 0.0003    
 PATIENCE_LR = 1           
 FACTOR_LR = 0.6           
-NUM_WORKERS = 4           
+NUM_WORKERS = 2           
 
 # Umbrales Notas
 THRESHOLD_ONSET = 0.35    
@@ -48,9 +51,9 @@ THRESHOLD_FRAME = 0.35
 THRESHOLD_OFFSET = 0.40
 
 # Umbrales Pedal
-TH_PED_ON = 0.50
-TH_PED_FR = 0.50
-TH_PED_OFF = 0.50
+TH_PED_ON = 0.30
+TH_PED_FR = 0.40
+TH_PED_OFF = 0.45
 
 def set_seed(seed):
     random.seed(seed)
@@ -293,7 +296,11 @@ class FG_LSTM(nn.Module):
         b, c, f, t = x.shape
         x = x.permute(0, 2, 3, 1).reshape(b * f, t, c)
         self.lstm.flatten_parameters()
-        output, _ = self.lstm(x)
+        # 🛡️ FIX DE CLAUDE: Forzar float32 en LSTM para evitar explosión matemática (NaN)
+        with torch.amp.autocast('cuda', enabled=False):
+            x_f32 = x.float()
+            output, _ = self.lstm(x_f32)
+        #output, _ = self.lstm(x)
         output = self.proj(output)
         output = output.view(b, f, t)
         return output.permute(0, 2, 1) 
@@ -396,84 +403,48 @@ def tensor_to_notes(onset_pred, frame_pred, offset_pred, velocity_pred=None, t_o
                 notes.append([onset_time, offset_time, pitch + 21, vel])
     return notes
 
-def compute_metrics_standard(ref_notes_batch, est_notes_batch):
-    total_tp, total_fp, total_fn = 0, 0, 0
-    for ref_notes, est_notes in zip(ref_notes_batch, est_notes_batch):
-        ref_arr = np.array(ref_notes)
-        est_arr = np.array(est_notes)
-        if len(ref_arr) == 0 and len(est_arr) == 0: continue
-        if len(ref_arr) == 0: total_fp += len(est_arr); continue
-        if len(est_arr) == 0: total_fn += len(ref_arr); continue
+def calc_tp_fp_fn_onset(ref_notes, est_notes):
+    ref_arr, est_arr = np.array(ref_notes), np.array(est_notes)
+    if len(ref_arr) == 0 and len(est_arr) == 0: return 0, 0, 0
+    if len(ref_arr) == 0: return 0, len(est_arr), 0
+    if len(est_arr) == 0: return 0, 0, len(ref_arr)
+    
+    matched = mir_eval.transcription.match_notes(
+        ref_arr[:, :2], ref_arr[:, 2], est_arr[:, :2], est_arr[:, 2], 
+        onset_tolerance=0.05, offset_ratio=None
+    )
+    tp = len(matched)
+    return tp, len(est_arr) - tp, len(ref_arr) - tp
 
-        ref_int, ref_p = ref_arr[:, :2], ref_arr[:, 2]
-        est_int, est_p = est_arr[:, :2], est_arr[:, 2]
-        
-        matched = mir_eval.transcription.match_notes(
-            ref_int, ref_p, est_int, est_p, onset_tolerance=0.05, offset_ratio=None
-        )
-        tp = len(matched)
-        total_tp += tp
-        total_fp += (len(est_p) - tp)
-        total_fn += (len(ref_p) - tp)
-        
-    p = total_tp / (total_tp + total_fp + 1e-8)
-    r = total_tp / (total_tp + total_fn + 1e-8)
-    f1 = 2 * p * r / (p + r + 1e-8)
-    return f1, p, r
+def calc_tp_fp_fn_offset(ref_notes, est_notes):
+    ref_arr, est_arr = np.array(ref_notes), np.array(est_notes)
+    if len(ref_arr) == 0 and len(est_arr) == 0: return 0, 0, 0
+    if len(ref_arr) == 0: return 0, len(est_arr), 0
+    if len(est_arr) == 0: return 0, 0, len(ref_arr)
 
-def compute_note_offset_metrics(ref_notes_batch, est_notes_batch):
-    total_tp, total_fp, total_fn = 0, 0, 0
-    for ref_notes, est_notes in zip(ref_notes_batch, est_notes_batch):
-        ref_arr = np.array(ref_notes)
-        est_arr = np.array(est_notes)
-        if len(ref_arr) == 0 and len(est_arr) == 0: continue
-        if len(ref_arr) == 0: total_fp += len(est_arr); continue
-        if len(est_arr) == 0: total_fn += len(ref_arr); continue
+    matched = mir_eval.transcription.match_notes(
+        ref_arr[:, :2], ref_arr[:, 2], est_arr[:, :2], est_arr[:, 2], 
+        onset_tolerance=0.05, offset_ratio=0.2, offset_min_tolerance=0.05
+    )
+    tp = len(matched)
+    return tp, len(est_arr) - tp, len(ref_arr) - tp
 
-        ref_int, ref_p = ref_arr[:, :2], ref_arr[:, 2]
-        est_int, est_p = est_arr[:, :2], est_arr[:, 2]
-        
-        matched = mir_eval.transcription.match_notes(
-            ref_int, ref_p, est_int, est_p, 
-            onset_tolerance=0.05, offset_ratio=0.2, offset_min_tolerance=0.05
-        )
-        tp = len(matched)
-        total_tp += tp
-        total_fp += (len(est_p) - tp)
-        total_fn += (len(ref_p) - tp)
-        
-    p = total_tp / (total_tp + total_fp + 1e-8)
-    r = total_tp / (total_tp + total_fn + 1e-8)
-    f1 = 2 * p * r / (p + r + 1e-8)
-    return f1, p, r
+def calc_tp_fp_fn_velocity(ref_notes, est_notes, velocity_tolerance=0.1):
+    ref_arr, est_arr = np.array(ref_notes), np.array(est_notes)
+    if len(ref_arr) == 0 and len(est_arr) == 0: return 0, 0, 0
+    if len(ref_arr) == 0: return 0, len(est_arr), 0
+    if len(est_arr) == 0: return 0, 0, len(ref_arr)
 
-def compute_note_offset_velocity_metrics(ref_notes_batch, est_notes_batch, velocity_tolerance=0.1):
-    total_tp, total_fp, total_fn = 0, 0, 0
-    for ref_notes, est_notes in zip(ref_notes_batch, est_notes_batch):
-        ref_arr = np.asarray(ref_notes)
-        est_arr = np.asarray(est_notes)
-        if len(ref_arr) == 0 and len(est_arr) == 0: continue
-        if len(ref_arr) == 0: total_fp += len(est_arr); continue
-        if len(est_arr) == 0: total_fn += len(ref_arr); continue
-
-        ref_intervals, ref_pitches, ref_velocities = ref_arr[:, :2], ref_arr[:, 2], ref_arr[:, 3]
-        est_intervals, est_pitches, est_velocities = est_arr[:, :2], est_arr[:, 2], est_arr[:, 3]
-
-        matched = mir_eval.transcription.match_notes(
-            ref_intervals, ref_pitches, est_intervals, est_pitches,
-            onset_tolerance=0.05, offset_ratio=0.2, offset_min_tolerance=0.05,
-        )
-        n_matched = len(matched)
-        tp_velocity = sum([1 for ref_idx, est_idx in matched if abs(ref_velocities[ref_idx] - est_velocities[est_idx]) <= velocity_tolerance])
-
-        total_tp += tp_velocity
-        total_fp += (len(est_pitches) - n_matched) + (n_matched - tp_velocity)
-        total_fn += (len(ref_pitches) - n_matched) + (n_matched - tp_velocity)
-
-    p = total_tp / (total_tp + total_fp + 1e-8)
-    r = total_tp / (total_tp + total_fn + 1e-8)
-    f1 = 2 * p * r / (p + r + 1e-8)
-    return f1, p, r
+    matched = mir_eval.transcription.match_notes(
+        ref_arr[:, :2], ref_arr[:, 2], est_arr[:, :2], est_arr[:, 2],
+        onset_tolerance=0.05, offset_ratio=0.2, offset_min_tolerance=0.05,
+    )
+    n_matched = len(matched)
+    tp_vel = sum([1 for r_idx, e_idx in matched if abs(ref_arr[r_idx, 3] - est_arr[e_idx, 3]) <= velocity_tolerance])
+    
+    fp = (len(est_arr) - n_matched) + (n_matched - tp_vel)
+    fn = (len(ref_arr) - n_matched) + (n_matched - tp_vel)
+    return tp_vel, fp, fn
 
 def plot_training_history(csv_path="training_log_kaggle.csv"):
     if not os.path.exists(csv_path): return
@@ -532,7 +503,7 @@ if __name__ == "__main__":
     val_ds = PianoDataset(DATA_PATH, split='validation') 
     
     train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS, pin_memory=True)
-    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
+    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS, pin_memory=False) #Pin True
     
     model = HPPNet(in_channels=1, lstm_hidden=128).to(DEVICE)  
     
@@ -569,42 +540,76 @@ if __name__ == "__main__":
             t_loss = 0
             
             with tqdm(train_loader, desc=f"Ep {epoch+1}/{FINAL_EPOCHS}", leave=False) as bar:
-                for batch in bar:
+                for batch_idx, batch in enumerate(bar):
                     hcqt = batch['hcqt'].to(DEVICE)
                     targets = {k: v.to(DEVICE) for k, v in batch.items() if k != 'hcqt'}
+                    
+                    # 🕵️‍♂️ FORENSE 1: Chequeo de Entrada
+                    if torch.isnan(hcqt).any() or torch.isinf(hcqt).any():
+                        print(f"\n🚨 [FORENSE] El Audio de entrada en el lote {batch_idx} contiene NaN o Inf.")
+                        continue
                     
                     optimizer.zero_grad()
                     
                     with torch.amp.autocast('cuda'):
                         p_on, p_fr, p_off, p_vel, ped_on, ped_fr, ped_off = model(hcqt)
 
-                    p_on = p_on.float()
-                    p_fr = p_fr.float()
-                    p_off = p_off.float()
-                    p_vel = p_vel.float()
-                    ped_on = ped_on.float()
-                    ped_fr = ped_fr.float()
-                    ped_off = ped_off.float()
+                    # 🕵️‍♂️ FORENSE 2: Chequeo post-red (Explosión en LSTM / FP16)
+                    if torch.isnan(p_fr).any():
+                        print(f"\n🚨 [FORENSE] La salida del modelo (LSTMs) se volvió NaN. Posible desbordamiento de gradientes FP16.")
+                        optimizer.zero_grad()
+                        # 👇 NUEVO: Destruimos las variables y limpiamos la gráfica
+                        del p_on, p_fr, p_off, p_vel, ped_on, ped_fr, ped_off
+                        torch.cuda.empty_cache()
+                        continue
+
+                    p_on = p_on.float(); p_fr = p_fr.float(); p_off = p_off.float(); p_vel = p_vel.float()
+                    ped_on = ped_on.float(); ped_fr = ped_fr.float(); ped_off = ped_off.float()
                     
                     l_on = crit_onset(p_on, targets['onset'])
                     l_fr = crit_frame(p_fr, targets['frame'])
                     l_off = crit_offset(p_off, targets['offset'])
                     mask = targets['frame'].float()
-                    l_vel = (crit_vel(torch.sigmoid(p_vel), targets['velocity'].float()) * mask).sum() / (mask.sum() + 1e-4)
+                    l_vel = (crit_vel(torch.sigmoid(p_vel), targets['velocity'].float()) * mask).sum() / (mask.sum() + 1e-6)
                     
                     l_ped_on = crit_onset(ped_on, targets['pedal_onset'])
                     l_ped_fr = crit_frame(ped_fr, targets['pedal_frame'])
                     l_ped_off = crit_offset(ped_off, targets['pedal_offset'])
                     
                     loss = (1.0 * l_on) + (5.0 * l_fr) + (5.0 * l_off) + l_vel + (1.0 * l_ped_on) + (5.0 * l_ped_fr) + (5.0 * l_ped_off)
-                        
+                    
+                    # 🕵️‍♂️ FORENSE 3: Disección del Loss
+                    if torch.isnan(loss) or torch.isinf(loss):
+                        print("\n" + "="*50)
+                        print(f"💀 MANZANA ENVENENADA DETECTADA (Lote {batch_idx})")
+                        print("DIAGNÓSTICO DEL LOSS:")
+                        print(f" - Onset Notas Loss : {l_on.item()}")
+                        print(f" - Frame Notas Loss : {l_fr.item()}")
+                        print(f" - Offset Notas Loss: {l_off.item()}")
+                        print(f" - Velocity Loss    : {l_vel.item()}")
+                        print(f" - Pedal Onset Loss : {l_ped_on.item()}")
+                        print(f" - Pedal Frame Loss : {l_ped_fr.item()}")
+                        print(f" - Pedal Offset Loss: {l_ped_off.item()}")
+                        print("="*50)
+                        optimizer.zero_grad()
+                        # 👇 NUEVO: Destruimos el grafo y el loss
+                        del p_on, p_fr, p_off, p_vel, ped_on, ped_fr, ped_off, loss
+                        torch.cuda.empty_cache()
+                        continue 
+
+                    # Actualización de pesos
                     scaler.scale(loss).backward()
                     scaler.unscale_(optimizer)
+                    
+                    # El clipping (recorte de gradientes) evita explosiones futuras
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    
                     scaler.step(optimizer)
                     scaler.update()
+                    
                     t_loss += loss.item()
                     bar.set_postfix(loss=loss.item())
+                    
             
             avg_t_loss = t_loss / len(train_loader)
             should_validate = ((epoch + 1) % 3 == 0) or ((epoch + 1) == FINAL_EPOCHS)
@@ -613,20 +618,18 @@ if __name__ == "__main__":
                 model.eval()
                 v_loss = 0
                 
-                # Colecciones Notas (Solo guardamos los eventos crudos para mir_eval)
-                ref_all, est_all = [], []
                 vel_accum, vel_count = 0, 0
                 
-                # 🛡️ CONTADORES INCREMENTALES DE MEMORIA CERO [TP, FP, FN]
-                metric_fr = np.zeros(3)
-                metric_off = np.zeros(3)
-                metric_ped_on = np.zeros(3)
-                metric_ped_fr = np.zeros(3)
-                metric_ped_off = np.zeros(3)
+                # 🛡️ CONTADORES INCREMENTALES GLOBALES (Ocupan 0 memoria)
+                metric_fr = np.zeros(3); metric_off = np.zeros(3)
+                metric_ped_on = np.zeros(3); metric_ped_fr = np.zeros(3); metric_ped_off = np.zeros(3)
+                
+                metric_note_on = np.zeros(3)  # [TP, FP, FN] para Onset
+                metric_note_off = np.zeros(3) # [TP, FP, FN] para Offset
+                metric_note_vel = np.zeros(3) # [TP, FP, FN] para Velocity
 
                 def update_metrics(preds, targs, metric_array):
-                    p = preds.bool()
-                    t = targs.bool()
+                    p = preds.bool(); t = targs.bool()
                     metric_array[0] += (p & t).sum().item()
                     metric_array[1] += (p & ~t).sum().item()
                     metric_array[2] += (~p & t).sum().item()
@@ -652,7 +655,6 @@ if __name__ == "__main__":
                         pr_on, pr_fr, pr_off, pr_vel = torch.sigmoid(p_on), torch.sigmoid(p_fr), torch.sigmoid(p_off), torch.sigmoid(p_vel)
                         pr_ped_on, pr_ped_fr, pr_ped_off = torch.sigmoid(ped_on), torch.sigmoid(ped_fr), torch.sigmoid(ped_off)
                         
-                        # 🛡️ ACTUALIZACIÓN DE MÉTRICAS EN TIEMPO REAL
                         update_metrics(pr_fr > THRESHOLD_FRAME, targets['frame'] > 0.5, metric_fr)
                         update_metrics(pr_off > THRESHOLD_OFFSET, targets['offset'] > 0.5, metric_off)
                         update_metrics(pr_ped_on > TH_PED_ON, targets['pedal_onset'] > 0.5, metric_ped_on)
@@ -666,6 +668,7 @@ if __name__ == "__main__":
                             vel_accum += mean_squared_error(v_t[m], v_p[m]) * m.sum()
                             vel_count += m.sum()
 
+                        # 🛡️ EVALUACIÓN AL VUELO DE NOTAS (mir_eval)
                         for i in range(len(hcqt)):
                             v_map = pr_vel[i].cpu().numpy()
                             est = tensor_to_notes(pr_on[i].cpu().numpy(), pr_fr[i].cpu().numpy(), pr_off[i].cpu().numpy(), v_map, t_onset=THRESHOLD_ONSET, t_frame=THRESHOLD_FRAME, t_offset=THRESHOLD_OFFSET)
@@ -681,16 +684,26 @@ if __name__ == "__main__":
                                     e = o + 1
                                     while e < ref_fr.shape[0] and ref_fr[e, pitch] > 0.5: e += 1
                                     if e - o > 1: 
-                                        vel_val = ref_vel[o, pitch]   
-                                        ref.append([o*HOP_LENGTH/SR, e*HOP_LENGTH/SR, pitch+21, vel_val])
-                            est_all.append(est)
-                            ref_all.append(ref)
+                                        ref.append([o*HOP_LENGTH/SR, e*HOP_LENGTH/SR, pitch+21, ref_vel[o, pitch]])
+                            
+                            # Calcular métricas de este segmento y sumar a globales
+                            tp, fp, fn = calc_tp_fp_fn_onset(ref, est)
+                            metric_note_on += [tp, fp, fn]
+                            
+                            tp, fp, fn = calc_tp_fp_fn_offset(ref, est)
+                            metric_note_off += [tp, fp, fn]
+                            
+                            tp, fp, fn = calc_tp_fp_fn_velocity(ref, est, 0.1)
+                            metric_note_vel += [tp, fp, fn]
+                            
+                            # 🛡️ LIMPIEZA EXPLÍCITA DE VARIABLES PESADAS
+                            del est, ref, ref_on, ref_fr, ref_vel, v_map
+                        
+                        # Limpieza del lote general
+                        del hcqt, targets, p_on, p_fr, p_off, p_vel, ped_on, ped_fr, ped_off
+                        del pr_on, pr_fr, pr_off, pr_vel, pr_ped_on, pr_ped_fr, pr_ped_off, v_p, v_t, m
 
                 avg_v_loss = v_loss / len(val_loader)
-                
-                onset_f1, onset_p, onset_r = compute_metrics_standard(ref_all, est_all)
-                note_off_f1, note_off_p, note_off_r = compute_note_offset_metrics(ref_all, est_all)
-                note_off_vel_f1, note_off_vel_p, note_off_vel_r = compute_note_offset_velocity_metrics(ref_all, est_all, velocity_tolerance=0.1)
                 vel_mse = vel_accum / (vel_count + 1e-8)
 
                 def calc_f1(metric_array):
@@ -699,6 +712,11 @@ if __name__ == "__main__":
                     r = tp / (tp + fn + 1e-8)
                     f1 = 2 * p * r / (p + r + 1e-8)
                     return f1, p, r
+
+                # Calcular F1 finales a partir de los contadores
+                onset_f1, onset_p, onset_r = calc_f1(metric_note_on)
+                note_off_f1, note_off_p, note_off_r = calc_f1(metric_note_off)
+                note_off_vel_f1, note_off_vel_p, note_off_vel_r = calc_f1(metric_note_vel)
 
                 frame_f1, frame_p, frame_r = calc_f1(metric_fr)
                 offset_f1, offset_p, offset_r = calc_f1(metric_off)
@@ -746,6 +764,14 @@ if __name__ == "__main__":
                 
                 state_dict = model.module.state_dict() if isinstance(model, nn.DataParallel) else model.state_dict()
                 torch.save(state_dict, "latest_checkpoint.pth")
+
+            # =======================================================
+            # 🛡️ LIMPIEZA TOTAL DE MEMORIA AL FINAL DE CADA ÉPOCA
+            # =======================================================
+            
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
     
     except KeyboardInterrupt:
             print("\n🛑 Entrenamiento detenido.")

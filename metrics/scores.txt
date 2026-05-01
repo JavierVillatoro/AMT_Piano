@@ -887,3 +887,23 @@ problema hotframe
 -------voy a pasar al plan de accion de separar train val test------ nos aseguramos data leakage
 ----muestreo estratificado para preprocess nuevo----
 --- corregir error en umbrales de pedal , antes usaba los de antes , ahora nuevas variables , y >0.5
+
+
+
+pedal 100 percent and split 
+--------------------------------------------------------------------------------
+🏁 Epoch 3 Results: Train Loss=3.7022 | Val Loss=4.1597
+🎹 NOTAS:
+   ➤ Onset      : F1=0.9061 | P=0.9317 | R=0.8818
+   ➤ Frame      : F1=0.7464 | P=0.6695 | R=0.8434
+   ➤ Offset     : F1=0.2700 | P=0.3328 | R=0.2271
+   ➤ Note-Off   : F1=0.5494 | P=0.5650 | R=0.5347
+   ➤ N-Off+Vel  : F1=0.4775 | P=0.4911 | R=0.4647
+   ➤ Vel MSE    : 0.0056
+🦶 PEDAL:
+   ➤ Onset      : F1=0.2132 | P=0.1415 | R=0.4320
+   ➤ Frame      : F1=0.8967 | P=0.8200 | R=0.9891
+   ➤ Offset     : F1=0.3774 | P=0.4278 | R=0.3376
+🧠 LR: 3.00e-04
+--------------------------------------------------------------------------------
+   💾 Nuevo Récord! Modelo guardado (Frame F1: 0.7464)
